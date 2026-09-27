@@ -1,119 +1,242 @@
-# God's Eye CYD
+<div align="center">
 
-A native ESP32 reimagining of [God's Eye View](https://github.com/bilawalsidhu/gods-eye-view) for the **Cheap Yellow Display** (ESP32-2432S028, 2‑USB / ST7789).
+# 🌐 God's Eye CYD
 
-The original is CesiumJS + Google Photorealistic 3D Tiles + WebGL — a full 3D globe that cannot run on a 520 KB, no‑PSRAM, no‑GPU WROOM. So this isn't a port of the *renderer*; it's a port of the *idea*: pull the same keyless public OSINT feeds over WiFi and paint them on a **north‑up tactical PPI** (plan‑position indicator / radar) with tap‑to‑select telemetry and sensor‑style optics.
+### Live open-source spatial intelligence on a $10 screen.
 
-**All five v1 layers are keyless.** WiFi and location are set on the device itself at first boot — from your phone, no editing files — so it's flash-and-go for anyone you hand it to.
+A native ESP32 firmware that brings the spirit of **[God's Eye View](https://github.com/bilawalsidhu/gods-eye-view)** to the **Cheap Yellow Display** — live aircraft, earthquakes, satellites, rocket launches, a pannable world satellite map, and public webcams, all on a 2.8" touchscreen. No API keys. Set up from your phone.
 
----
+![Platform](https://img.shields.io/badge/platform-ESP32--WROOM-black?logo=espressif&logoColor=white)
+![Board](https://img.shields.io/badge/board-ESP32--2432S028%20(CYD)-FFCC00)
+![Arduino](https://img.shields.io/badge/Arduino-IDE-00979D?logo=arduino&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Keys](https://img.shields.io/badge/API%20keys-none%20required-brightgreen)
+![Stars](https://img.shields.io/github/stars/Kul3y3-Thric3/GodsEyeCYD?style=social)
 
-## What it does
-
-- **PPI radar** centered on your location, north‑up, 3 range rings, tap the range chip to cycle 20 → 250 NM.
-- **✈️ Flights** — live ADS‑B from `adsb.lol`. Heading‑aligned glyphs, military traffic highlighted, tap for callsign / alt / GS / track / range.
-- **🌍 Earthquakes** — USGS M2.5+ last 24 h, sized by magnitude, tap for depth + place.
-- **🛰️ Satellites** — CelesTrak TLEs + on‑device **SGP4** (ISS, HST, NOAA‑19 by default). Sub‑satellite point plots when it's over your scope; tap for alt/lat/lon.
-- **🚀 Launches** — Launch Library 2 upcoming, next‑launch countdown in the panel.
-- **🗺️ MAP mode** — pannable/zoomable **satellite imagery** of anywhere on Earth (Esri World Imagery, keyless) with **live flights drawn on top**. Tap **MAP** on the radar bar. Tap the map to recenter, **−/+** to zoom, **HOME** to jump back, **BACK** to the radar. It's a *slow* map by design (one JPEG tile fetched + decoded at a time — seconds per repaint; no smooth 3D globe is possible on this chip), but you can explore the whole planet from above.
-- **📹 CCTV** — a **scrollable worldwide list of public MJPEG webcams** (ski, ports, airports, city cams…) streamed **live** over HTTP. Tap a camera to watch; tap the image or **NEXT** to skip, **BACK** to the list. Frames are carved from the MJPEG stream (SOI→EOI) and decoded on‑device. Public cams come and go, so some will read "camera offline" — just skip. Edit the list in `cctv_list.h`. (Camera list adapted from 7h30th3r0n3's RaspyJack CCTV viewer.)
-- **Optics** — NORMAL / NVG / FLIR‑ironbow / AMBER‑tactical palettes, switch in the menu.
+</div>
 
 ---
 
-## Flash it
+## About
 
-### 1. Libraries (Arduino Library Manager)
-- **TFT_eSPI** (Bodmer)
-- **XPT2046_Touchscreen** (PaulStoffregen)
-- **ArduinoJson** — **v7.x**
-- **TJpg_Decoder** (Bodmer)
-- **Sgp4** (by *Hopperpop* — the `SparkFun_SGP4_Arduino_Library` is the same code and also works)
-- **WiFiManager** (by *tzapu*) — the first‑boot captive portal
+The original **God's Eye View** is a photorealistic 3D globe (CesiumJS + WebGL + Google 3D Tiles) that needs a real GPU and gigabytes of RAM. A Cheap Yellow Display has a 240 MHz ESP32, ~520 KB of RAM, no PSRAM, and no GPU — so a 3D globe is off the table.
 
-Board: **ESP32 Dev Module** (esp32 core 2.x or 3.x). Set **Partition Scheme → "Huge APP"** (the TLS stack + libs push past the default app partition).
+**God's Eye CYD** is not a port of the *renderer* — it's a port of the *idea*. It pulls the same kind of keyless, public OSINT feeds over WiFi and renders them natively on the CYD as a **north-up tactical radar (PPI)**, a **2D satellite map you can fly anywhere on Earth**, and a **live public-webcam viewer** — with sensor-style "optics" (NVG, FLIR, amber tactical) for the full spy-thriller feel. It's flash-and-go: WiFi and location are configured on-device from your phone at first boot, and everything persists in flash.
 
-### 2. The display setup — do this or you get a blank screen
-TFT_eSPI is configured at **compile time**, not from the sketch. Copy the included `User_Setup.h` over:
+> ⚠️ Exploratory visualization of public data. **Not for navigation, aviation, emergency, or any safety-critical use.** Data may be delayed, modeled, or wrong.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Data sources](#data-sources)
+- [Hardware](#hardware)
+- [Quick start](#quick-start)
+- [First boot](#first-boot)
+- [Controls](#controls)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Architecture](#architecture)
+- [Roadmap](#roadmap)
+- [Credits](#credits)
+- [License](#license)
+
+---
+
+## Features
+
+| | Feature | Details |
+|---|---|---|
+| 🎯 | **Tactical PPI radar** | North-up plan-position display centered on your location, 3 range rings, tap the chip to cycle 20 → 250 NM. Tap any blip for a live telemetry card. |
+| ✈️ | **Live flights** | Real-time ADS-B. Heading-aligned aircraft glyphs, military traffic highlighted, tap for callsign / altitude / ground speed / track / range. |
+| 🌍 | **Earthquakes** | USGS global feed, sized by magnitude, tap for depth + location. |
+| 🛰️ | **Satellites** | On-device **SGP4** propagation from live CelesTrak TLEs (ISS, Hubble, NOAA-19 by default). Plots the sub-satellite point as it passes over your scope. |
+| 🚀 | **Rocket launches** | Upcoming launches with a live T-minus countdown in the panel. |
+| 🗺️ | **Satellite MAP mode** | Pan/zoom **satellite imagery of anywhere on Earth** (Esri World Imagery) with **live aircraft overlaid**. Tap to recenter, ± to zoom, HOME to return. |
+| 📹 | **CCTV** | Scrollable list of **public MJPEG webcams** worldwide (ski, ports, airports, cities) streamed **live** on-device. |
+| 🎨 | **Sensor optics** | NORMAL / NVG (night vision) / FLIR ironbow / AMBER tactical palettes. |
+| 📱 | **Phone setup** | First-boot captive portal for WiFi + location — no file editing, no keys. Everything saved to flash (NVS). |
+
+---
+
+## Data sources
+
+Every layer is **keyless**. Nothing here requires an account, token, or payment.
+
+| Layer | Source | Notes |
+|---|---|---|
+| Flights | [adsb.fi](https://adsb.fi) (primary) · [adsb.lol](https://adsb.lol) | Community ADS-B aggregators |
+| Earthquakes | [USGS](https://earthquake.usgs.gov) | M4.5+ / 24 h GeoJSON (adjustable) |
+| Satellites | [CelesTrak](https://celestrak.org) TLEs + **SGP4** (Hopperpop) | Propagated on-device |
+| Launches | [Launch Library 2](https://thespacedevs.com) | Free tier, polled every 30 min |
+| Map imagery | **Esri World Imagery** | Web Mercator tiles |
+| Geocoding | [Open-Meteo](https://open-meteo.com) | City name → lat/lon |
+| CCTV | Public MJPEG webcams | List in `cctv_list.h` |
+
+---
+
+## Hardware
+
+- **ESP32-2432S028** "Cheap Yellow Display" — 2.8" 240×320 TFT + resistive touch.
+  - The **2-USB** variant (micro-USB + USB-C) typically ships with an **ST7789** panel (the default here); the classic 1-USB variant uses **ILI9341**. Both are supported — one line in `User_Setup.h`.
+- A 2.4 GHz WiFi network (the ESP32 has no 5 GHz radio).
+- A good USB **data** cable / stable 5V supply (WiFi streaming is current-hungry — weak power causes glitches).
+
+No SD card and no PSRAM required.
+
+---
+
+## Quick start
+
+### 1. Install libraries (Arduino Library Manager)
+
+| Library | Author |
+|---|---|
+| TFT_eSPI | Bodmer |
+| TJpg_Decoder | Bodmer |
+| XPT2046_Touchscreen | PaulStoffregen |
+| ArduinoJson **(v7.x)** | Benoît Blanchon |
+| WiFiManager | tzapu |
+| Sgp4 | Hopperpop *(the `SparkFun_SGP4_Arduino_Library` is the same code and also works)* |
+
+Boards: install **esp32 by Espressif Systems** (Boards Manager). Select **ESP32 Dev Module**, and set **Tools → Partition Scheme → Huge APP**.
+
+### 2. Install the display config
+
+TFT_eSPI is configured at **compile time**, so copy the included setup over the library's default:
 
 ```
-Arduino/libraries/TFT_eSPI/User_Setup.h
+<your Arduino folder>/libraries/TFT_eSPI/User_Setup.h   ←  replace with this repo's User_Setup.h
 ```
 
-It defaults to **ST7789** (your 2‑USB board). On boot you'll see **R / G / B color bars + text**:
-- **Blank / white screen** → wrong driver. Open `User_Setup.h`, comment Option A (ST7789), uncomment Option B (ILI9341), reflash.
-- **Colors look like a photo negative** → uncomment `#define TFT_INVERSION_ON` (comment the OFF line).
-- **Reds and blues swapped** → change `TFT_RGB_ORDER TFT_BGR` to `TFT_RGB`.
-- **Glitchy pixels** → drop `SPI_FREQUENCY` to `40000000`.
+It defaults to **ST7789 @ 40 MHz**. On boot you'll see **R / G / B color bars** — a self-test:
+- Blank/white screen → wrong driver: switch to ILI9341 in `User_Setup.h`.
+- Photo-negative colors → uncomment `TFT_INVERSION_ON`.
+- Red/blue swapped → change `TFT_RGB_ORDER` to `TFT_RGB`.
 
-### 3. Flash — no file editing needed
-Flash `GodsEyeCYD.ino`. WiFi and location are set on‑device (see **First boot** below).
-`config.h` still holds tunables you *can* change if you want — default layers, poll
-intervals, the satellite catalog numbers, CCTV URLs, and the fallback location — but
-none of that is required to get running.
+### 3. Flash
+
+Open `GodsEyeCYD.ino`, select your board/port, and upload. **No file editing needed** — WiFi and location are set on-device.
 
 ---
 
-## First boot (and re‑setup)
+## First boot
 
-The device stores your WiFi + location in the ESP32's own flash (NVS). **No SD card or PSRAM required.**
+Settings persist in the ESP32's flash (NVS) — configured once, from your phone:
 
-1. On first power‑up (or any time it can't reach the saved network) it broadcasts a WiFi hotspot named **`GodsEye‑Setup`**. The screen shows the join instructions.
-2. On your phone, join that hotspot. A setup page opens automatically (or browse to `192.168.4.1`).
-3. Pick your home WiFi, type the password, and fill the **Home location** field — a city, e.g. `Nashville, TN` or `Berlin, DE`.
-4. Save. It connects, geocodes the city once (keyless, via Open‑Meteo) into lat/lon, and remembers everything.
+1. On first power-up (or whenever it can't reach the saved network), the device broadcasts a WiFi hotspot **`GodsEye-Setup`**; the screen shows join instructions.
+2. Join it from your phone — a setup page opens automatically (or browse to `192.168.4.1`).
+3. Pick your WiFi, enter the password, and type a **Home location** (e.g. `Nashville, TN` or `Berlin, DE`).
+4. Save. It connects, geocodes the city once, centers the radar there, and remembers everything.
 
-Every boot after that it **auto‑reconnects** silently and centers on your saved location. To change WiFi or location later: **hold the BOOT button while powering on** (or tap **SETUP** in the on‑screen menu) to reopen the portal. It's 2.4 GHz only — the ESP32 has no 5 GHz radio.
-
----
-
-## Using it
-
-- **Tap a blip** → telemetry card in the right panel. Tap empty scope to deselect.
-- **Range chip** (top‑right) → cycle range.
-- **MENU** (bottom bar) → toggle layers, cycle optics.
-- **CCTV** (bottom bar) → snapshot viewer; tap left/right to change camera, BACK to exit.
-- Link dot (top‑right) + green LED = a poll landed in the last 20 s.
-
-### Touch feels off?
-Tune the 4 constants at the top of `ui.h` (`TS_MINX/MAXX/MINY/MAXY`). If taps never register, your unit's touch IRQ may be unwired — change `mapTouch()` to drop the `touch.tirqTouched()` check and use `touch.touched()` alone.
+Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at power-on, or tap **SETUP** in the on-screen menu.
 
 ---
 
-## Design notes / honest caveats
+## Controls
 
-- **I have not flashed this on hardware** — no ESP32 or CYD in my sandbox. It's written to compile and run, but expect to nudge the display driver toggles and touch calibration on first boot. That's exactly why the boot self‑test and the clearly‑marked toggles exist. Tell me what the screen does and I'll fix it fast.
-- **One network fetch at a time.** With no PSRAM, running five TLS feeds concurrently would blow the heap, so feeds poll on a **rotating schedule** (see intervals in `config.h`). A fetch briefly blocks the UI (TLS handshake). The clean upgrade is to move polling onto a FreeRTOS task on core 0 with a mutex around the contact arrays — a good v2.
-- **Rate limits.** `adsb.lol` and USGS are generous. **Launch Library 2 free tier is ~15 req/hr** — hence the 30‑min poll and off‑by‑default. CelesTrak TLEs refresh every 6 h.
-- **Selection across refreshes** is by array index, so a selected plane can "jump" when the flight list updates. Matching by ICAO hex is a small v2 improvement.
-- **CCTV** needs a **direct `.jpg` snapshot** URL, not an HLS/RTSP stream or an HTML page. Swap in TxDOT / Caltrans / Fintraffic / DriveBC snapshot URLs (same sources God's Eye View uses).
-- **`setInsecure()`** skips TLS cert validation — fine for public read‑only feeds; don't reuse this client for anything you care about authenticating.
-- **Satellites** only appear on the scope when their ground track crosses your range — a real "ISS overhead" moment, not a persistent dot.
+**Radar**
+- **Tap a blip** → telemetry card. Tap empty scope to deselect.
+- **Range chip** (top-right) → cycle range.
+- Bottom bar: **MAP** · **MENU** · **CCTV**.
+- Link dot (top-right) / green LED → a feed refreshed in the last 20 s.
 
-## File map
+**Menu** — toggle layers, cycle **OPTIC** (palette), **SETUP** (re-open portal), current HOME shown at the bottom.
+
+**MAP** — tap to recenter, **− / +** zoom, **HOME** to your location, **BACK** to radar.
+
+**CCTV** — scroll the list (**UP/DOWN**), tap a camera to stream; while playing, tap image or **NEXT** to skip, **PREV** back, **BACK** to the list.
+
+---
+
+## Configuration
+
+Everything works out of the box; `config.h` holds optional tunables:
+
+- Default layer on/off, poll intervals, radar range steps, boot optic/theme.
+- `SAT_CATNRS[]` — NORAD catalog numbers to track.
+- `FLIGHTS_QUERY_NM` — ADS-B search radius.
+- Fallback home location (used only before you set one via the portal).
+
+Cameras live in **`cctv_list.h`** (`{ "Label", "http://host:port/path" }`). Add your own — must be **`http://` MJPEG** streams (`/mjpg/video.mjpg` or `/axis-cgi/mjpg/video.cgi` style); HLS/RTSP won't work.
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Blank / white screen | Wrong display driver — switch ST7789 ↔ ILI9341 in `User_Setup.h`. |
+| Negative or swapped colors | Toggle `TFT_INVERSION_ON` / `TFT_RGB_ORDER` in `User_Setup.h`. |
+| Screen glitches after running a while | Lower `SPI_FREQUENCY` (already 40 MHz); use a better USB **data** cable / stronger 5V. |
+| Upload fails ("Failed to connect") | Lower **Upload Speed** to 115200; hold **BOOT** during upload; try the other USB port. |
+| Flights stay at 0 | Panel shows a diagnostic — `okN` = working, `errNNN` = HTTP error from the feed. Try again or switch source in `layers.h`. |
+| Touch doesn't register | Tune `TS_MINX/MAXX/MINY/MAXY` at the top of `ui.h`. |
+| A camera shows "offline" | Public cams come and go — just skip to the next. |
+
+---
+
+## Architecture
+
+Vanilla Arduino/C++, one screen at a time, one network fetch at a time (no PSRAM → keep peak heap low).
+
 ```
-GodsEyeCYD.ino   main: globals, HW init, boot test, scheduler, touch, loop
+GodsEyeCYD.ino   main: globals, HW init, boot self-test, scheduler, touch, loop
 config.h         optional tunables (defaults; no editing required)
-User_Setup.h     >>> copy into the TFT_eSPI library folder <<<
-app_state.h      shared structs + extern globals (runtime home location)
-net.h            WiFi reconnect + TLS JSON/text/binary fetch
+User_Setup.h     TFT_eSPI display config → copy into the TFT_eSPI library folder
+app_state.h      shared structs + globals (runtime home location, UI state)
+net.h            WiFi reconnect + TLS JSON / text / binary fetch helpers
 prefs.h          NVS persistence (location, theme, range, layers)
 provision.h      WiFiManager captive portal + Open-Meteo geocoding
 geo.h            haversine range/bearing + north-up PPI projection
 theme.h          the four optic palettes
-layers.h         flights / quakes / sats(SGP4) / launches pollers
+layers.h         flights / quakes / satellites (SGP4) / launches pollers
 cctv.h           CCTV: scrollable list + live MJPEG-over-HTTP viewer
-cctv_list.h      the bundled worldwide public-webcam list (edit to taste)
-ui.h             radar, HUD, telemetry, menu, touch mapping
+cctv_list.h      bundled worldwide public-webcam list (edit to taste)
 mapview.h        satellite MAP mode (Esri tiles + flight overlay, pan/zoom)
+ui.h             radar, HUD, telemetry, menu, touch mapping
 ```
+
+**Design notes**
+- Feeds poll on a **rotating schedule** — one TLS request in flight at a time keeps peak heap safe without PSRAM.
+- Satellites propagate locally via **SGP4**; TLEs refresh every 6 h.
+- Selection tracks by array index today (a selected plane can "jump" on refresh) — hex-matching is a planned improvement.
+
+---
+
+## Roadmap
+
+- [ ] Tappable **F Q S L C** layer toggles on the radar bar
+- [ ] Match tracked aircraft by ICAO hex across refreshes (stable selection)
+- [ ] Move polling to a FreeRTOS task (core 0) so fetches never touch the UI
+- [ ] On-screen keyboard for direct city search in MAP mode
+- [ ] Fetch the CCTV list at runtime instead of bundling it
+- [ ] Tile caching for smoother MAP panning
+
+Contributions welcome — open an issue or PR.
+
+---
 
 ## Credits
 
-- **God's Eye View** by **[Bilawal Sidhu](https://github.com/bilawalsidhu)** & **Sameh Khamis** ([Halfpixel](https://halfpixel.ai)) — the original open-source live-OSINT globe that inspired this whole project. This firmware is an independent, hardware-scaled reimagining of that idea for the ESP32; all the credit for the concept and the "spatial intelligence for everyone" spirit is theirs. Original repo: <https://github.com/bilawalsidhu/gods-eye-view> (MIT).
-- **CCTV viewer & camera list** adapted from **[7h30th3r0n3](https://github.com/7h30th3r0n3)**'s **RaspyJack** (the MJPEG-over-HTTP approach and the public-webcam list). Repo: <https://github.com/7h30th3r0n3/Raspyjack>.
-- **Data & imagery:** aircraft — [adsb.fi](https://adsb.fi) / [adsb.lol](https://adsb.lol); earthquakes — [USGS](https://earthquake.usgs.gov); satellites — [CelesTrak](https://celestrak.org) TLEs + the **Sgp4** library by *Hopperpop*; launches — [Launch Library 2 / The Space Devs](https://thespacedevs.com); geocoding — [Open-Meteo](https://open-meteo.com); satellite basemap — **Esri World Imagery**; captive portal — **WiFiManager** by *tzapu*; display/touch/JPEG — **TFT_eSPI** & **TJpg_Decoder** by *Bodmer*, **XPT2046_Touchscreen** by *PaulStoffregen*.
+- **God's Eye View** by **[Bilawal Sidhu](https://github.com/bilawalsidhu)** & **Sameh Khamis** ([Halfpixel](https://halfpixel.ai)) — the original open-source live-OSINT globe that inspired this project. This firmware is an independent, hardware-scaled reimagining of that idea for the ESP32; the concept and the "spatial intelligence for everyone" spirit are theirs. → <https://github.com/bilawalsidhu/gods-eye-view> (MIT)
+- **CCTV viewer & camera list** adapted from **[7h30th3r0n3](https://github.com/7h30th3r0n3)**'s **RaspyJack** — the MJPEG-over-HTTP frame-grabbing approach and the public-webcam list. → <https://github.com/7h30th3r0n3/Raspyjack>
+- **Libraries:** TFT_eSPI & TJpg_Decoder (*Bodmer*), XPT2046_Touchscreen (*PaulStoffregen*), ArduinoJson (*Benoît Blanchon*), WiFiManager (*tzapu*), Sgp4 (*Hopperpop*).
+- **Data & imagery:** adsb.fi · adsb.lol · USGS · CelesTrak · The Space Devs · Open-Meteo · Esri World Imagery.
 
-Built by **Kul3y3-Thric3**. Released under the MIT License (see `LICENSE`).
+Built by **[Kul3y3-Thric3](https://github.com/Kul3y3-Thric3)**.
 
-Data may be delayed, incomplete, modeled, or wrong. This is an exploratory visualization of public data — **do not use it for navigation, aviation, emergency, or any safety-critical purpose.** Each data source carries its own terms of use; respect them. The bundled public webcams are third-party feeds that go up and down without notice.
+---
+
+## License
+
+Released under the **MIT License** — see [`LICENSE`](LICENSE).
+
+Bundled and live data/imagery are provided by third parties under their own terms of use; respect them. The bundled public webcams are third-party feeds that appear and disappear without notice.
+
+<div align="center">
+
+**🌐 God's Eye CYD — no place left behind.**
+
+</div>
