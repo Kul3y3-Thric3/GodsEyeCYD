@@ -1,0 +1,22 @@
+# Build artifacts
+build/
+*.bin
+*.elf
+*.map
+*.hex
+
+# Arduino / PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+*.tmp
+
+# Secrets — never commit real WiFi creds if you hardcode any locally
+secrets.h
+wifi_creds.h
+
+# OS cruft
+.DS_Store
+Thumbs.db
+*~
+.vscode/
