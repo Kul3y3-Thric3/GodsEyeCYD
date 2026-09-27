@@ -208,17 +208,18 @@ static void drawPanel(){
 }
 
 // ------------------------------------------------------------------ botbar ----
+#define LEGEND_X_MAX 72          // tap x < this on the bottom bar = a layer toggle
 static void drawBotBar(){
   const Palette& p=PAL();
   int y=240-BOT_H;
   tft.fillRect(0,y,320,BOT_H,p.bg);
   tft.drawFastHLine(0,y,320,p.grid);
-  // layer legend
-  const char* L="FQSLC"; const uint8_t idx[5]={L_FLIGHTS,L_QUAKES,L_SATS,L_LAUNCHES,L_CCTV};
+  // layer legend — tappable toggles (F Q S L C). Zone: x < LEGEND_X_MAX.
+  const char* L="FQSLC";
   tft.setTextFont(1); tft.setTextDatum(TL_DATUM);
   for(int i=0;i<5;i++){ char c[2]={L[i],0};
-    tft.setTextColor(g_app.layerOn[idx[i]]?p.center:p.dim,p.bg);
-    tft.drawString(c,4+i*12,y+4);
+    tft.setTextColor(g_app.layerOn[i]?p.center:p.dim,p.bg);   // enum order == legend order
+    tft.drawString(c,6+i*13,y+4);
   }
   // theme name (center)
   tft.setTextDatum(TC_DATUM); tft.setTextColor(p.accent,p.bg);

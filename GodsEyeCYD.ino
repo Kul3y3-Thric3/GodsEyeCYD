@@ -91,10 +91,15 @@ static void handleTouch(){
   int mx,my; if(!mapTouch(mx,my)) return;
 
   if(g_app.screen==SCR_RADAR){
-    if(my>=240-BOT_H){                                // bottom bar: MAP | MENU | CCTV
-      if(mx>=170 && mx<212)      enterMap();
-      else if(mx>=212 && mx<262) enterMenu();
-      else if(mx>=262)           enterCctv();
+    if(my>=240-BOT_H){                                // bottom bar
+      if(mx<LEGEND_X_MAX){                            // F Q S L C -> toggle layer
+        int li=clampi((mx-2)/13,0,L_COUNT-1);
+        g_app.layerOn[li]=!g_app.layerOn[li];
+        g_app.selIndex=-1; prefsSaveUI(); drawRadar();
+      }
+      else if(mx>=170 && mx<212)  enterMap();
+      else if(mx>=212 && mx<262)  enterMenu();
+      else if(mx>=262)            enterCctv();
     } else if(mx>=PANEL_X && my<TOP_H+20){            // range chip
       int n=sizeof(RANGE_STEPS)/sizeof(RANGE_STEPS[0]); int cur=0;
       for(int i=0;i<n;i++) if(RANGE_STEPS[i]==g_app.rangeNm) cur=i;

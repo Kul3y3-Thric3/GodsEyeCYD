@@ -6,6 +6,8 @@
 
 A native ESP32 firmware that brings the spirit of **[God's Eye View](https://github.com/bilawalsidhu/gods-eye-view)** to the **Cheap Yellow Display** — live aircraft, earthquakes, satellites, rocket launches, a pannable world satellite map, and public webcams, all on a 2.8" touchscreen. No API keys. Set up from your phone.
 
+<img src="docs/hero.jpg" alt="God's Eye CYD running on an ESP32-2432S028 Cheap Yellow Display" width="480">
+
 ![Platform](https://img.shields.io/badge/platform-ESP32--WROOM-black?logo=espressif&logoColor=white)
 ![Board](https://img.shields.io/badge/board-ESP32--2432S028%20(CYD)-FFCC00)
 ![Arduino](https://img.shields.io/badge/Arduino-IDE-00979D?logo=arduino&logoColor=white)
@@ -139,6 +141,7 @@ Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at
 **Radar**
 - **Tap a blip** → telemetry card. Tap empty scope to deselect.
 - **Range chip** (top-right) → cycle range.
+- **Tap F Q S L C** (bottom-left) → toggle a layer on/off directly (Flights, Quakes, Sats, Launches, CCTV). Lit = on.
 - Bottom bar: **MAP** · **MENU** · **CCTV**.
 - Link dot (top-right) / green LED → a feed refreshed in the last 20 s.
 
@@ -207,7 +210,7 @@ ui.h             radar, HUD, telemetry, menu, touch mapping
 
 ## Roadmap
 
-- [ ] Tappable **F Q S L C** layer toggles on the radar bar
+- [x] Tappable **F Q S L C** layer toggles on the radar bar
 - [ ] Match tracked aircraft by ICAO hex across refreshes (stable selection)
 - [ ] Move polling to a FreeRTOS task (core 0) so fetches never touch the UI
 - [ ] On-screen keyboard for direct city search in MAP mode
