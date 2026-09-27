@@ -147,7 +147,7 @@ Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at
 
 **Menu** — toggle layers, cycle **OPTIC** (palette), **SETUP** (re-open portal), current HOME shown at the bottom.
 
-**MAP** — tap to recenter, **− / +** zoom, **HOME** to your location, **BACK** to radar.
+**MAP** — tap to recenter, **− / +** zoom, **GO** to type any latitude/longitude and jump there, **HOME** to your location, **BACK** to radar. (You can also reach anywhere on Earth by zooming out, tapping a region, and zooming back in.)
 
 **CCTV** — scroll the list (**UP/DOWN**), tap a camera to stream; while playing, tap image or **NEXT** to skip, **PREV** back, **BACK** to the list.
 
@@ -213,7 +213,8 @@ ui.h             radar, HUD, telemetry, menu, touch mapping
 - [x] Tappable **F Q S L C** layer toggles on the radar bar
 - [ ] Match tracked aircraft by ICAO hex across refreshes (stable selection)
 - [ ] Move polling to a FreeRTOS task (core 0) so fetches never touch the UI
-- [ ] On-screen keyboard for direct city search in MAP mode
+- [x] On-screen keypad to jump to any latitude/longitude in MAP mode
+- [ ] On-screen keyboard for city-name search (geocoded) in MAP mode
 - [ ] Fetch the CCTV list at runtime instead of bundling it
 - [ ] Tile caching for smoother MAP panning
 

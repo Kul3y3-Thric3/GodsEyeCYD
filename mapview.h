@@ -45,23 +45,89 @@ static bool mapTftOutput(int16_t x,int16_t y,uint16_t w,uint16_t h,uint16_t* bmp
   return true;
 }
 
-// ---- the map bar (bottom): [-] [+]  center/zoom  [HOME] [BACK] ---------------
+// ---- the map bar (bottom): [-] [+] [GO]  center/zoom  [HOME] [BACK] ----------
+//  Touch zones (handled in the .ino): <40 zoom out · 40-80 zoom in ·
+//  80-120 GO (keypad) · 230-285 HOME · 285+ BACK · elsewhere on map = recenter.
 static void drawMapBar(){
   const Palette& p=PAL();
-  int by=240-MAP_BAR_H;
+  int by=240-MAP_BAR_H, cy=by+MAP_BAR_H/2;
   tft.fillRect(0,by,320,MAP_BAR_H,p.bg);
   tft.drawFastHLine(0,by,320,p.grid);
   tft.setTextFont(2); tft.setTextDatum(MC_DATUM);
   tft.setTextColor(p.accent,p.bg);
-  tft.drawString("-", 20,by+MAP_BAR_H/2);
-  tft.drawString("+", 60,by+MAP_BAR_H/2);
+  tft.drawString("-", 20,cy);
+  tft.drawString("+", 60,cy);
+  tft.drawString("GO",100,cy);
   tft.setTextColor(p.text,p.bg);
-  tft.drawString("HOME",250,by+MAP_BAR_H/2);
-  tft.drawString("BACK",300,by+MAP_BAR_H/2);
+  tft.drawString("HOME",256,cy);
+  tft.drawString("BACK",303,cy);
   // center lat/lon + zoom
   tft.setTextFont(1); tft.setTextColor(p.dim,p.bg);
   char c[30]; snprintf(c,sizeof(c),"%.2f,%.2f z%d",g_mapLat,g_mapLon,g_mapZoom);
-  tft.drawString(c,160,by+MAP_BAR_H/2);
+  tft.drawString(c,178,cy);
+}
+
+// ---- on-screen numeric keypad: type LAT then LON to jump the map anywhere ----
+static const char* MAPKB[16] = {
+  "1","2","3","DEL",  "4","5","6","+/-",  "7","8","9",".",  "CLR","0","OK","EXIT" };
+
+static void mapKbDraw(bool lonPhase,const char* val){
+  const Palette& p=PAL();
+  tft.fillScreen(p.bg);
+  tft.setTextDatum(TC_DATUM); tft.setTextFont(2); tft.setTextColor(p.accent,p.bg);
+  tft.drawString(lonPhase?"ENTER LONGITUDE":"ENTER LATITUDE",160,4);
+  tft.drawRect(8,24,304,28,p.grid);
+  tft.setTextDatum(ML_DATUM); tft.setTextColor(p.text,p.bg);
+  tft.drawString(val[0]?val:"_",16,39);
+  tft.setTextDatum(TR_DATUM); tft.setTextFont(1); tft.setTextColor(p.dim,p.bg);
+  tft.drawString(lonPhase?"-180..180":"-90..90",306,28);
+  tft.setTextFont(2); tft.setTextDatum(MC_DATUM);
+  for(int i=0;i<16;i++){ int c=i%4,r=i/4, x=8+c*76, y=62+r*44;
+    tft.drawRoundRect(x,y,72,40,4,p.grid);
+    bool ok=(i==14);
+    tft.setTextColor(ok?p.center:p.text,p.bg);
+    tft.drawString(MAPKB[i],x+36,y+20);
+  }
+}
+static int mapKbHit(int mx,int my){
+  if(my<62) return -1;
+  int c=(mx-8)/76, r=(my-62)/44;
+  if(c<0||c>3||r<0||r>3) return -1;
+  return r*4+c;
+}
+// Blocking keypad. Returns true if a valid new center was entered.
+inline bool mapGoto(){
+  char lat[16]={0}, lon[16]={0}; bool lonPhase=false; char* cur=lat;
+  mapKbDraw(false,cur);
+  while(true){
+    int mx,my;
+    if(!mapTouch(mx,my)){ delay(5); continue; }
+    int k=mapKbHit(mx,my);
+    uint32_t t=millis(); while(touch.touched()&&millis()-t<400)delay(8);
+    if(k<0) continue;
+    const char* key=MAPKB[k]; int len=strlen(cur);
+    if(!strcmp(key,"EXIT")) return false;
+    else if(!strcmp(key,"CLR")) cur[0]=0;
+    else if(!strcmp(key,"DEL")){ if(len) cur[len-1]=0; }
+    else if(!strcmp(key,"+/-")){
+      if(cur[0]=='-') memmove(cur,cur+1,strlen(cur));
+      else if(len<14){ memmove(cur+1,cur,strlen(cur)+1); cur[0]='-'; }
+    }
+    else if(!strcmp(key,".")){ if(!strchr(cur,'.') && len<14){ cur[len]='.'; cur[len+1]=0; } }
+    else if(!strcmp(key,"OK")){
+      if(!lonPhase){ lonPhase=true; cur=lon; mapKbDraw(true,cur); continue; }
+      double la=atof(lat), lo=atof(lon);
+      if(la<-90||la>90||lo<-180||lo>180){
+        tft.setTextDatum(TC_DATUM); tft.setTextFont(1); tft.setTextColor(PAL().warn,PAL().bg);
+        tft.drawString("out of range - fix it",160,232); delay(1100);
+        mapKbDraw(true,cur); continue;
+      }
+      g_mapLat=la; g_mapLon=lo; g_app.qLat=la; g_app.qLon=lo;
+      return true;
+    }
+    else if(len<14){ cur[len]=key[0]; cur[len+1]=0; }   // a digit
+    mapKbDraw(lonPhase,cur);
+  }
 }
 
 // ---- overlay live flights on the imagery ------------------------------------

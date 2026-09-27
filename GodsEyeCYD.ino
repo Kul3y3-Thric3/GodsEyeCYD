@@ -137,9 +137,10 @@ static void handleTouch(){
     if(my>=240-MAP_BAR_H){                             // map bar
       if(mx<40)        { if(g_mapZoom>MAP_MIN_Z){g_mapZoom--; drawMap();} }        // [-]
       else if(mx<80)   { if(g_mapZoom<MAP_MAX_Z){g_mapZoom++; drawMap();} }        // [+]
-      else if(mx>=210 && mx<270){ g_mapLat=g_app.homeLat; g_mapLon=g_app.homeLon;  // HOME
+      else if(mx<120)  { if(mapGoto()) tF=0; drawMap(); }                          // [GO] keypad
+      else if(mx>=230 && mx<285){ g_mapLat=g_app.homeLat; g_mapLon=g_app.homeLon;  // HOME
                                   g_app.qLat=g_mapLat; g_app.qLon=g_mapLon; tF=0; drawMap(); }
-      else if(mx>=270) { enterRadar(); }                                           // BACK
+      else if(mx>=285) { enterRadar(); }                                           // BACK
     } else {                                           // tap map body -> recenter
       mapTapRecenter(mx,my); tF=0; drawMap();
     }

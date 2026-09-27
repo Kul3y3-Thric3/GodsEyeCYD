@@ -47,11 +47,11 @@ static const int RANGE_STEPS[] = { 20, 40, 80, 150, 250 };
 
 // --- Flights (adsb.lol, keyless) ---------------------------------------------
 #define FLIGHTS_MAX         48          // hard cap on tracked contacts (RAM)
-#define FLIGHTS_QUERY_NM    120         // adsb.lol search radius (<=250). Kept
-                                        // modest so the JSON body fits in heap
-                                        // without PSRAM. Covers the default 80nm
-                                        // view comfortably; at the 250nm setting
-                                        // only traffic within 120nm is shown.
+#define FLIGHTS_QUERY_NM    75          // ADS-B search radius (<=250). Kept small
+                                        // so the JSON body reliably fits in heap
+                                        // without PSRAM (a large body returns 200
+                                        // but fails to parse -> "err200"). Covers
+                                        // the busy area around most airports.
 
 // --- Satellites (CelesTrak, keyless) -----------------------------------------
 // NORAD catalog numbers to track. 25544 = ISS (ZARYA), 20580 = Hubble.

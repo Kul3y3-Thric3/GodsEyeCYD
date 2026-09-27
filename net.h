@@ -27,6 +27,7 @@ inline bool fetchJson(const char* url, JsonDocument& doc,
   if(!http.begin(client, url)) return false;
   http.addHeader("User-Agent","Mozilla/5.0 (GodsEyeCYD ESP32)");
   http.addHeader("Accept","application/json");
+  http.addHeader("Accept-Encoding","identity");   // no gzip — we can't decompress
   int code = http.GET();
   if(httpCode) *httpCode = code;
   if(code != HTTP_CODE_OK){ http.end(); return false; }
