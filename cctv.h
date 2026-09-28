@@ -22,6 +22,36 @@ static uint8_t*  s_mj = nullptr; // frame accumulator (alloc while viewing)
 static size_t    s_mjLen = 0;
 static WiFiClient s_mjClient;
 
+// ---- camera list: fetched from CCTV_LIST_URL if possible, else bundled -------
+static String g_camLabel[CCTV_LIST_MAX];
+static String g_camUrl[CCTV_LIST_MAX];
+static int    g_camN = 0;          // 0 = use bundled CCTV_CAMS
+static bool   g_camLoaded = false; // fetch attempted this boot
+
+inline int         camCount()      { return g_camN>0 ? g_camN : CCTV_COUNT; }
+inline const char* camLabel(int i) { return g_camN>0 ? g_camLabel[i].c_str() : CCTV_CAMS[i].label; }
+inline const char* camUrl(int i)   { return g_camN>0 ? g_camUrl[i].c_str()   : CCTV_CAMS[i].url; }
+
+// Fetch + parse the remote list once. Keeps the bundled list on any failure.
+inline void cctvLoadList(){
+  if(g_camLoaded) return;
+  g_camLoaded=true;
+  String body;
+  if(!fetchText(CCTV_LIST_URL, body, 9000) || body.length()<10) return;
+  int n=0, start=0, len=body.length();
+  while(start<len && n<CCTV_LIST_MAX){
+    int nl=body.indexOf('\n',start); if(nl<0) nl=len;
+    String line=body.substring(start,nl); line.trim(); start=nl+1;
+    if(line.length()<6 || line[0]=='#' || line[0]=='[') continue;
+    int bar=line.indexOf('|'); if(bar<0) continue;
+    String lab=line.substring(0,bar);  lab.trim();
+    String url=line.substring(bar+1);  url.trim();
+    if(!url.startsWith("http")) continue;
+    g_camLabel[n]=lab; g_camUrl[n]=url; n++;
+  }
+  if(n>0) g_camN=n;                // switch to the fetched list only if non-empty
+}
+
 // ---- decode target: blit frame blocks, clipped above the caption strip ------
 static bool cctvOut(int16_t x,int16_t y,uint16_t w,uint16_t h,uint16_t* bmp){
   if(y>=216) return false;
@@ -99,7 +129,7 @@ static void cctvCaption(const char* txt,uint16_t col){
   tft.setTextFont(2); tft.setTextDatum(TL_DATUM); tft.setTextColor(col,p.bg);
   tft.drawString(txt,6,219);
   tft.setTextFont(1); tft.setTextDatum(TR_DATUM); tft.setTextColor(p.dim,p.bg);
-  char n[26]; snprintf(n,sizeof(n),"%d/%d  PREV NEXT BACK",g_app.cctvIdx+1,CCTV_COUNT);
+  char n[26]; snprintf(n,sizeof(n),"%d/%d  PREV NEXT BACK",g_app.cctvIdx+1,camCount());
   tft.drawString(n,315,222);
 }
 
@@ -112,12 +142,12 @@ inline void cctvDrawList(){
   tft.setTextDatum(TL_DATUM);
   int top=g_app.cctvScroll;
   for(int i=0;i<MJPG_ROWS;i++){
-    int idx=top+i; if(idx>=CCTV_COUNT) break;
+    int idx=top+i; if(idx>=camCount()) break;
     int y=22+i*MJPG_ROW_H;
     bool sel=(idx==g_app.cctvIdx);
     if(sel) tft.fillRect(0,y,320,MJPG_ROW_H,p.grid);
     tft.setTextColor(sel?p.center:p.text, sel?p.grid:p.bg);
-    tft.drawString(CCTV_CAMS[idx].label,6,y+2);
+    tft.drawString(camLabel(idx),6,y+2);
   }
   const int fy=22+MJPG_ROWS*MJPG_ROW_H;
   tft.drawFastHLine(0,fy,320,p.grid);
@@ -136,13 +166,15 @@ inline int cctvPlay(){
   if(!s_mj) return 1;
 
   while(true){
-    const CctvCam& cam=CCTV_CAMS[clampi(g_app.cctvIdx,0,CCTV_COUNT-1)];
+    int ci=clampi(g_app.cctvIdx,0,camCount()-1);
+    const char* camLbl=camLabel(ci);
+    const char* camU  =camUrl(ci);
     tft.fillScreen(PAL().bg);
     tft.setTextDatum(MC_DATUM); tft.setTextFont(2); tft.setTextColor(PAL().dim,PAL().bg);
     tft.drawString("connecting...",160,108);
-    cctvCaption(cam.label,PAL().accent);
+    cctvCaption(camLbl,PAL().accent);
 
-    bool ok=mjpgOpen(cam.url);
+    bool ok=mjpgOpen(camU);
     int action=-1;                       // 0 radar, 1 list, 2 prev, 3 next
     uint32_t lastFrame=millis();
 
@@ -157,7 +189,7 @@ inline int cctvPlay(){
           int oy=(216-jh/sc)/2; if(oy<0)oy=0;
           if(ox>0||oy>0) tft.fillRect(0,0,320,216,PAL().bg);
           TJpgDec.drawJpg(ox,oy,s_mj,len);
-          cctvCaption(cam.label,PAL().center);
+          cctvCaption(camLbl,PAL().center);
           g_app.lastRx=millis(); lastFrame=millis();
         } else if(millis()-lastFrame>6000){
           break;                         // stalled -> offline handling below
@@ -177,7 +209,7 @@ inline int cctvPlay(){
       tft.drawString("camera offline",160,100);
       tft.setTextColor(PAL().dim,PAL().bg);
       tft.drawString("tap: next   BACK: list",160,124);
-      cctvCaption(cam.label,PAL().warn);
+      cctvCaption(camLbl,PAL().warn);
       uint32_t t0=millis();
       while(action<0 && millis()-t0<15000){
         int mx,my;
@@ -189,8 +221,9 @@ inline int cctvPlay(){
     }
 
     s_mjClient.stop();
-    if(action==1){ free(s_mj); s_mj=nullptr; return 1; }                    // LIST
-    if(action==2) g_app.cctvIdx=(g_app.cctvIdx+CCTV_COUNT-1)%CCTV_COUNT;    // PREV
-    else          g_app.cctvIdx=(g_app.cctvIdx+1)%CCTV_COUNT;               // NEXT
+    int cc=camCount();
+    if(action==1){ free(s_mj); s_mj=nullptr; return 1; }        // LIST
+    if(action==2) g_app.cctvIdx=(g_app.cctvIdx+cc-1)%cc;        // PREV
+    else          g_app.cctvIdx=(g_app.cctvIdx+1)%cc;           // NEXT
   }
 }

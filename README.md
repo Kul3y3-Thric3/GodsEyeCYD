@@ -58,6 +58,7 @@ The original **God's Eye View** is a photorealistic 3D globe (CesiumJS + WebGL +
 | 🗺️ | **Satellite MAP mode** | Pan/zoom **satellite imagery of anywhere on Earth** (Esri World Imagery) with **live aircraft overlaid**. Tap to recenter, ± to zoom, HOME to return. |
 | 📹 | **CCTV** | Scrollable list of **public MJPEG webcams** worldwide (ski, ports, airports, cities) streamed **live** on-device. |
 | 🎨 | **Sensor optics** | NORMAL / NVG (night vision) / FLIR ironbow / AMBER tactical palettes. |
+| 🛰️ | **GPS (optional)** | Plug an ATGM336H (or any NMEA GPS) into the 4-pin JST — auto-detected. Toggle with **G** on the legend; shows a live "you are here" on the radar and a **LOC** button to center the satellite map on your real position. Great for wardriving. |
 | 📱 | **Phone setup** | First-boot captive portal for WiFi + location — no file editing, no keys. Everything saved to flash (NVS). |
 
 ---
@@ -74,7 +75,8 @@ Every layer is **keyless**. Nothing here requires an account, token, or payment.
 | Launches | [Launch Library 2](https://thespacedevs.com) | Free tier, polled every 30 min |
 | Map imagery | **Esri World Imagery** | Web Mercator tiles |
 | Geocoding | [Open-Meteo](https://open-meteo.com) | City name → lat/lon |
-| CCTV | Public MJPEG webcams | List in `cctv_list.h` |
+| CCTV | Public MJPEG webcams | List in `cameras.txt` / `cctv_list.h` |
+| GPS *(optional)* | On-device NMEA (ATGM336H etc.) | No network — parsed with TinyGPSPlus |
 
 ---
 
@@ -84,6 +86,7 @@ Every layer is **keyless**. Nothing here requires an account, token, or payment.
   - The **2-USB** variant (micro-USB + USB-C) typically ships with an **ST7789** panel (the default here); the classic 1-USB variant uses **ILI9341**. Both are supported — one line in `User_Setup.h`.
 - A 2.4 GHz WiFi network (the ESP32 has no 5 GHz radio).
 - A good USB **data** cable / stable 5V supply (WiFi streaming is current-hungry — weak power causes glitches).
+- **Optional GPS** — an ATGM336H (or any NMEA module) on the 4-pin JST. Wardriving-standard CYD wiring (ESP32 Marauder): **GPS TX → GPIO22**, **GPS RX → GPIO27**, **3.3V**, **GND**, at **9600 baud**. Pins are set in `config.h`. Uses the **TinyGPSPlus** library.
 
 No SD card and no PSRAM required.
 
@@ -101,6 +104,7 @@ No SD card and no PSRAM required.
 | ArduinoJson **(v7.x)** | Benoît Blanchon |
 | WiFiManager | tzapu |
 | Sgp4 | Hopperpop *(the `SparkFun_SGP4_Arduino_Library` is the same code and also works)* |
+| TinyGPSPlus | Mikal Hart *(only needed if you use the optional GPS)* |
 
 Boards: install **esp32 by Espressif Systems** (Boards Manager). Select **ESP32 Dev Module**, and set **Tools → Partition Scheme → Huge APP**.
 
@@ -142,12 +146,13 @@ Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at
 - **Tap a blip** → telemetry card. Tap empty scope to deselect.
 - **Range chip** (top-right) → cycle range.
 - **Tap F Q S L C** (bottom-left) → toggle a layer on/off directly (Flights, Quakes, Sats, Launches, CCTV). Lit = on.
+- **Tap G** (after the legend) → toggle **GPS**. Dim = off, amber = on/acquiring, green = fix. With a fix, a "GPS" marker shows your position on the radar and the panel shows `Nsat FIX`.
 - Bottom bar: **MAP** · **MENU** · **CCTV**.
 - Link dot (top-right) / green LED → a feed refreshed in the last 20 s.
 
 **Menu** — toggle layers, cycle **OPTIC** (palette), **SETUP** (re-open portal), current HOME shown at the bottom.
 
-**MAP** — tap to recenter, **− / +** zoom, **GO** to type any latitude/longitude and jump there, **HOME** to your location, **BACK** to radar. (You can also reach anywhere on Earth by zooming out, tapping a region, and zooming back in.)
+**MAP** — tap to recenter, **− / +** zoom, **GO** to type any latitude/longitude and jump there, **LOC** to center on your live GPS position (a "YOU" marker), **HOME** to your saved location, **BACK** to radar. (You can also reach anywhere on Earth by zooming out, tapping a region, and zooming back in.)
 
 **CCTV** — scroll the list (**UP/DOWN**), tap a camera to stream; while playing, tap image or **NEXT** to skip, **PREV** back, **BACK** to the list.
 
@@ -162,7 +167,7 @@ Everything works out of the box; `config.h` holds optional tunables:
 - `FLIGHTS_QUERY_NM` — ADS-B search radius.
 - Fallback home location (used only before you set one via the portal).
 
-Cameras live in **`cctv_list.h`** (`{ "Label", "http://host:port/path" }`). Add your own — must be **`http://` MJPEG** streams (`/mjpg/video.mjpg` or `/axis-cgi/mjpg/video.cgi` style); HLS/RTSP won't work.
+Cameras are pulled at runtime from **`cameras.txt`** (`Label | http://host:port/path`, one per line) — edit that file and push, and the device picks up the new list next time you open CCTV, **no reflash needed**. The bundled **`cctv_list.h`** is the offline fallback. Streams must be **`http://` MJPEG** (`/mjpg/video.mjpg` or `/axis-cgi/mjpg/video.cgi` style); HLS/RTSP won't work.
 
 ---
 
@@ -195,16 +200,20 @@ provision.h      WiFiManager captive portal + Open-Meteo geocoding
 geo.h            haversine range/bearing + north-up PPI projection
 theme.h          the four optic palettes
 layers.h         flights / quakes / satellites (SGP4) / launches pollers
+gps.h            optional GPS (ATGM336H etc.) on the JST connector, NMEA via TinyGPSPlus
 cctv.h           CCTV: scrollable list + live MJPEG-over-HTTP viewer
-cctv_list.h      bundled worldwide public-webcam list (edit to taste)
+cctv_list.h      bundled offline-fallback webcam list
+cameras.txt      runtime webcam list fetched over HTTP (edit + push, no reflash)
 mapview.h        satellite MAP mode (Esri tiles + flight overlay, pan/zoom)
 ui.h             radar, HUD, telemetry, menu, touch mapping
 ```
 
 **Design notes**
-- Feeds poll on a **rotating schedule** — one TLS request in flight at a time keeps peak heap safe without PSRAM.
+- **Threading:** feeds poll on a dedicated **FreeRTOS task pinned to core 0**, while the UI runs on core 1 — so a slow TLS fetch never freezes touch, the sweep, or the clock. A mutex guards the shared contact arrays (held only around the fast populate/read, never during a fetch), and a busy-flag stops the poller from colliding with the CCTV/MAP screens, which own the radio while they're up. Set `USE_NET_TASK 0` to fall back to inline polling.
+- One TLS request is in flight at a time, keeping peak heap safe without PSRAM.
 - Satellites propagate locally via **SGP4**; TLEs refresh every 6 h.
 - A selected aircraft is locked by its ICAO **hex**, so it stays selected on the same plane as the list refreshes (not by list position).
+- The CCTV list is fetched from `cameras.txt` at runtime (bundled `cctv_list.h` is the offline fallback).
 
 ---
 
@@ -212,11 +221,12 @@ ui.h             radar, HUD, telemetry, menu, touch mapping
 
 - [x] Tappable **F Q S L C** layer toggles on the radar bar
 - [x] Match tracked aircraft by ICAO hex across refreshes (stable selection)
-- [ ] Move polling to a FreeRTOS task (core 0) so fetches never touch the UI
+- [x] Poll feeds on a FreeRTOS task (core 0) so a slow fetch never freezes the UI
 - [x] On-screen keypad to jump to any latitude/longitude in MAP mode
+- [x] Fetch the CCTV camera list at runtime (`cameras.txt`) instead of only bundling it
 - [ ] On-screen keyboard for city-name search (geocoded) in MAP mode
-- [ ] Fetch the CCTV list at runtime instead of bundling it
-- [ ] Tile caching for smoother MAP panning
+- [ ] Live-radar dead-reckoning between polls (smoother glyph motion)
+- [ ] ~~Tile caching for smoother MAP panning~~ — not feasible without PSRAM (a single decoded 256² tile is 128 KB); would need an ESP32 with PSRAM
 
 Contributions welcome — open an issue or PR.
 

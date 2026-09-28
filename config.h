@@ -60,8 +60,22 @@ static const long SAT_CATNRS[] = { 25544, 20580, 33591 };  // ISS, HST, NOAA-19
 #define SATS_MAX  (sizeof(SAT_CATNRS)/sizeof(SAT_CATNRS[0]))
 
 // --- CCTV (public MJPEG webcams, keyless) ------------------------------------
-// The camera list lives in cctv_list.h (a scrollable worldwide set of public
-// MJPEG streams). Edit that file to add/remove cameras.
+// The bundled fallback camera list lives in cctv_list.h. On first opening CCTV
+// the device also tries to fetch an UPDATED list from CCTV_LIST_URL (a plain
+// text file, one "Label | http://host/path" per line, # and [category] lines
+// ignored) so you can add/replace cameras without reflashing. If the fetch
+// fails, the bundled list is used. Point this at your own repo's cameras.txt.
+#define CCTV_LIST_URL  "https://raw.githubusercontent.com/Kul3y3-Thric3/GodsEyeCYD/main/cameras.txt"
+#define CCTV_LIST_MAX  80          // max cameras held from the fetched list
+
+// --- GPS (optional ATGM336H etc. on the 4-pin JST, keyless) ------------------
+// Wardriving-standard CYD wiring (ESP32 Marauder): GPS TX -> GPIO22 (ESP RX),
+// GPS RX -> GPIO27 (ESP TX), plus 3.3V and GND. 22/27/35 are the CYD's free
+// extended GPIOs. Toggle GPS with the "G" on the radar legend.
+#define GPS_RX_PIN     22        // ESP32 receives NMEA here (from the GPS's TX)
+#define GPS_TX_PIN     27        // ESP32 transmits here (to the GPS's RX)
+#define GPS_BAUD       9600      // ATGM336H default
+#define GPS_DEFAULT_ON false     // start with GPS off; user toggles it on-screen
 
 // --- NTP (needed for SGP4 satellite propagation) -----------------------------
 #define NTP_SERVER   "pool.ntp.org"

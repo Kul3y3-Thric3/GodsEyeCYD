@@ -14,6 +14,7 @@
 // =============================================================================
 #include "app_state.h"
 #include "layers.h"
+#include "gps.h"            // optional GPS on the JST connector (before ui.h)
 #include "ui.h"
 #include "mapview.h"        // satellite MAP mode (must follow ui.h: uses triGlyph)
 #include "cctv.h"           // CCTV list + MJPEG viewer (must follow ui.h: uses mapTouch)
@@ -25,6 +26,15 @@ Quake     g_qk[24];            volatile int g_qkN=0;
 SatObj    g_sat[SATS_MAX];
 Launch    g_lx[6];             volatile int g_lxN=0;
 AppState  g_app;
+
+// ---- Networking task (core 0) -----------------------------------------------
+// Feeds are polled on a dedicated FreeRTOS task so a slow TLS fetch never
+// freezes the UI (touch, sweep, clock stay live). Set USE_NET_TASK 0 to fall
+// back to the old inline polling in loop() if you ever need to.
+#define USE_NET_TASK 1
+SemaphoreHandle_t g_dataMux = nullptr;   // declared extern in app_state.h
+static volatile bool g_netBusy  = false; // a background fetch is in flight
+static volatile bool g_netPause = false; // pause the task (e.g. during the portal)
 
 TFT_eSPI  tft;
 
@@ -66,9 +76,17 @@ static void bootSelfTest(){
   delay(1600);
 }
 
+// Wait until the background net task's current fetch finishes, so a UI-thread
+// fetch (map tiles, CCTV frames, a one-shot flight poll) never runs a second
+// TLS client at the same time. The task stops taking new work once the screen
+// leaves RADAR/MENU, so this returns within a fetch or two.
+static void netWaitIdle(){ uint32_t t=millis(); while(g_netBusy && millis()-t<4000) delay(10); }
+
 // ---- Screen transitions -----------------------------------------------------
 static void enterCctv(){
   g_app.screen=SCR_CCTV; g_app.cctvPlaying=false;
+  netWaitIdle();
+  cctvLoadList();                       // one-shot: pull the latest camera list
   setStatus("CCTV"); cctvDrawList();
 }
 static void enterRadar(){
@@ -82,7 +100,7 @@ static void enterMap(){
   g_app.screen=SCR_MAP;
   if(!g_mapInit){ g_mapLat=g_app.homeLat; g_mapLon=g_app.homeLon; g_mapZoom=11; g_mapInit=true; }
   g_app.qLat=g_mapLat; g_app.qLon=g_mapLon;             // flights around map center
-  tF=0;
+  netWaitIdle(); pollFlights();                         // one-shot: task is idle off-radar
   setStatus("MAP"); drawMap();
 }
 
@@ -92,10 +110,14 @@ static void handleTouch(){
 
   if(g_app.screen==SCR_RADAR){
     if(my>=240-BOT_H){                                // bottom bar
-      if(mx<LEGEND_X_MAX){                            // F Q S L C -> toggle layer
-        int li=clampi((mx-2)/13,0,L_COUNT-1);
-        g_app.layerOn[li]=!g_app.layerOn[li];
-        g_app.selIndex=-1; g_app.selHex[0]=0; prefsSaveUI(); drawRadar();
+      if(mx<LEGEND_X_MAX){                            // F Q S L C -> layer, G -> GPS
+        int li=(mx-2)/13;
+        if(li>=L_COUNT){ gpsSetEnabled(!g_app.gpsOn); prefsSaveUI(); drawRadar(); }
+        else {
+          li=clampi(li,0,L_COUNT-1);
+          g_app.layerOn[li]=!g_app.layerOn[li];
+          g_app.selIndex=-1; g_app.selHex[0]=0; prefsSaveUI(); drawRadar();
+        }
       }
       else if(mx>=170 && mx<212)  enterMap();
       else if(mx>=212 && mx<262)  enterMenu();
@@ -122,11 +144,11 @@ static void handleTouch(){
   else if(g_app.screen==SCR_CCTV){                     // camera list
     if(my>=CCTV_FOOTER_Y){                             // footer: UP | DOWN | RADAR
       if(mx<44){ if(g_app.cctvScroll>0){ g_app.cctvScroll-=MJPG_ROWS; if(g_app.cctvScroll<0)g_app.cctvScroll=0; cctvDrawList(); } }
-      else if(mx<110){ if(g_app.cctvScroll+MJPG_ROWS<CCTV_COUNT){ g_app.cctvScroll+=MJPG_ROWS; cctvDrawList(); } }
+      else if(mx<110){ if(g_app.cctvScroll+MJPG_ROWS<camCount()){ g_app.cctvScroll+=MJPG_ROWS; cctvDrawList(); } }
       else if(mx>260){ enterRadar(); }
     } else if(my>=22){                                 // a camera row
       int idx=g_app.cctvScroll + (my-22)/MJPG_ROW_H;
-      if(idx>=0 && idx<CCTV_COUNT){
+      if(idx>=0 && idx<camCount()){
         g_app.cctvIdx=idx;
         int r=cctvPlay();                              // blocking; 0=radar, 1=list
         if(r==0) enterRadar(); else cctvDrawList();
@@ -135,14 +157,24 @@ static void handleTouch(){
   }
   else if(g_app.screen==SCR_MAP){
     if(my>=240-MAP_BAR_H){                             // map bar
-      if(mx<40)        { if(g_mapZoom>MAP_MIN_Z){g_mapZoom--; drawMap();} }        // [-]
-      else if(mx<80)   { if(g_mapZoom<MAP_MAX_Z){g_mapZoom++; drawMap();} }        // [+]
-      else if(mx<120)  { if(mapGoto()) tF=0; drawMap(); }                          // [GO] keypad
-      else if(mx>=230 && mx<285){ g_mapLat=g_app.homeLat; g_mapLon=g_app.homeLon;  // HOME
-                                  g_app.qLat=g_mapLat; g_app.qLon=g_mapLon; tF=0; drawMap(); }
-      else if(mx>=285) { enterRadar(); }                                           // BACK
+      if(mx<32)        { if(g_mapZoom>MAP_MIN_Z){g_mapZoom--; drawMap();} }        // [-]
+      else if(mx<66)   { if(g_mapZoom<MAP_MAX_Z){g_mapZoom++; drawMap();} }        // [+]
+      else if(mx<104)  { if(mapGoto()) pollFlights(); drawMap(); }                 // [GO] keypad
+      else if(mx<150)  {                                                           // [LOC] center on GPS
+        if(g_app.gpsOn && g_gpsFix){
+          g_mapLat=g_gpsLat; g_mapLon=g_gpsLon;
+          g_app.qLat=g_mapLat; g_app.qLon=g_mapLon; pollFlights(); drawMap();
+        } else {
+          tft.setTextDatum(MC_DATUM); tft.setTextFont(2); tft.setTextColor(PAL().warn,PAL().bg);
+          tft.drawString(g_app.gpsOn?"GPS: acquiring...":"GPS off - tap G on radar",160,116);
+          delay(1000); drawMap();
+        }
+      }
+      else if(mx>=236 && mx<284){ g_mapLat=g_app.homeLat; g_mapLon=g_app.homeLon;  // HOME
+                                  g_app.qLat=g_mapLat; g_app.qLon=g_mapLon; pollFlights(); drawMap(); }
+      else if(mx>=284) { enterRadar(); }                                           // BACK
     } else {                                           // tap map body -> recenter
-      mapTapRecenter(mx,my); tF=0; drawMap();
+      mapTapRecenter(mx,my); pollFlights(); drawMap();
     }
   }
   // debounce / wait for release
@@ -166,6 +198,23 @@ static void doNetwork(){
     tL=now; setStatus("LL2..."); pollLaunches(); setStatus("RADAR"); return; }
 }
 
+#if USE_NET_TASK
+// Runs on core 0: polls feeds only while the radar/menu is showing (CCTV and
+// MAP own the radio themselves). One fetch per pass; the UI keeps running.
+static void netTask(void*){
+  for(;;){
+    Screen s=g_app.screen;
+    if((s==SCR_RADAR || s==SCR_MENU) && !g_netPause){
+      g_netBusy=true;
+      if(g_app.layerOn[L_SATS] && millis()-tS>=POLL_SATS_MS){ tS=millis(); pollSats(); }
+      doNetwork();
+      g_netBusy=false;
+    }
+    vTaskDelay(pdMS_TO_TICKS(120));
+  }
+}
+#endif
+
 void setup(){
   Serial.begin(115200);
   pinMode(LED_R,OUTPUT); pinMode(LED_G,OUTPUT); pinMode(LED_B,OUTPUT); ledOff();
@@ -177,11 +226,14 @@ void setup(){
   touchSPI.begin(T_CLK,T_MISO,T_MOSI,T_CS);
   touch.begin(touchSPI); touch.setRotation(1);
 
+  g_dataMux = xSemaphoreCreateMutex();   // guards the shared contact arrays
+
   pinMode(BOOT_BTN, INPUT_PULLUP);
 
   // Load saved settings (home location, theme, range, layers) from NVS. First
   // boot has none, so this leaves the config.h defaults in place.
   prefsLoad();
+  if(g_app.gpsOn) gpsSetEnabled(true);   // resume GPS if it was on last time
 
   // Hold BOOT at power-on to force the setup portal even if a network is saved.
   bool forcePortal = (digitalRead(BOOT_BTN)==LOW);
@@ -195,6 +247,11 @@ void setup(){
   configTime(GMT_OFFSET_SEC,DST_OFFSET_SEC,NTP_SERVER);
 
   enterRadar();
+
+#if USE_NET_TASK
+  // Start the background poller on core 0 (16 KB stack: TLS needs the room).
+  xTaskCreatePinnedToCore(netTask,"net",16384,nullptr,1,nullptr,0);
+#endif
 }
 
 void loop(){
@@ -202,21 +259,26 @@ void loop(){
   if(WiFi.status()!=WL_CONNECTED && millis()-tWifi>10000){ tWifi=millis(); wifiEnsure(8000); }
   ledLink(g_app.wifiUp && millis()-g_app.lastRx<20000);
 
+  if(g_app.gpsOn) gpsUpdate();       // drain the GPS UART + refresh position
+
   handleTouch();
 
   // SETUP button in the menu asked to re-open the phone portal.
   if(g_app.wantPortal){
     g_app.wantPortal=false;
+    g_netPause=true; netWaitIdle();   // stop the poller while the AP portal is up
     provisionRun(true);
     configTime(GMT_OFFSET_SEC,DST_OFFSET_SEC,NTP_SERVER);
     tF=tQ=tL=0;                       // re-poll immediately around the new HOME
+    g_netPause=false;
     enterRadar();
   }
 
-  // satellites: local SGP4, cheap, no radio
+#if !USE_NET_TASK
+  // Fallback inline polling (when the network task is disabled).
   if(g_app.layerOn[L_SATS] && millis()-tS>=POLL_SATS_MS){ tS=millis(); pollSats(); }
-
   doNetwork();
+#endif
 
   // render
   if(g_app.screen==SCR_RADAR && millis()-tDraw>=220){ tDraw=millis(); drawRadar(); }

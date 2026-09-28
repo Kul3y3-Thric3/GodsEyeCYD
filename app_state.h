@@ -6,7 +6,17 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "config.h"
+
+// ---- Data mutex --------------------------------------------------------------
+// Guards the shared contact arrays (g_ac/g_qk/g_sat/g_lx + counts). The network
+// task on core 0 writes them; the UI on core 1 reads them to draw. Locks are
+// held only around the FAST populate/read sections, never during a slow fetch.
+extern SemaphoreHandle_t g_dataMux;
+#define DATA_LOCK()    do{ if(g_dataMux) xSemaphoreTake(g_dataMux, portMAX_DELAY); }while(0)
+#define DATA_UNLOCK()  do{ if(g_dataMux) xSemaphoreGive(g_dataMux); }while(0)
 
 // ---- Layer identifiers -------------------------------------------------------
 enum Layer { L_FLIGHTS = 0, L_QUAKES, L_SATS, L_LAUNCHES, L_CCTV, L_COUNT };
@@ -85,6 +95,8 @@ struct AppState {
   // ---- active flight-query center: home on the radar, map center in MAP mode --
   double  qLat        = DEFAULT_HOME_LAT;
   double  qLon        = DEFAULT_HOME_LON;
+  // ---- GPS (optional module on the JST connector; separate from radar layers) -
+  bool    gpsOn       = false;         // user toggled GPS on (the "G" legend chip)
 };
 extern AppState g_app;
 

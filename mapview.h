@@ -45,9 +45,10 @@ static bool mapTftOutput(int16_t x,int16_t y,uint16_t w,uint16_t h,uint16_t* bmp
   return true;
 }
 
-// ---- the map bar (bottom): [-] [+] [GO]  center/zoom  [HOME] [BACK] ----------
-//  Touch zones (handled in the .ino): <40 zoom out · 40-80 zoom in ·
-//  80-120 GO (keypad) · 230-285 HOME · 285+ BACK · elsewhere on map = recenter.
+// ---- the map bar (bottom): [-] [+] [GO] [LOC]  center/zoom  [HOME] [BACK] ----
+//  Touch zones (handled in the .ino): <32 zoom out · 32-66 zoom in ·
+//  66-104 GO (keypad) · 104-150 LOC (center on GPS) · 236-284 HOME · 284+ BACK ·
+//  elsewhere on the map = recenter on the tapped point.
 static void drawMapBar(){
   const Palette& p=PAL();
   int by=240-MAP_BAR_H, cy=by+MAP_BAR_H/2;
@@ -55,16 +56,33 @@ static void drawMapBar(){
   tft.drawFastHLine(0,by,320,p.grid);
   tft.setTextFont(2); tft.setTextDatum(MC_DATUM);
   tft.setTextColor(p.accent,p.bg);
-  tft.drawString("-", 20,cy);
-  tft.drawString("+", 60,cy);
-  tft.drawString("GO",100,cy);
+  tft.drawString("-", 16,cy);
+  tft.drawString("+", 48,cy);
+  tft.drawString("GO",84,cy);
+  // LOC lit only when GPS has a fix
+  tft.setTextColor(g_app.gpsOn && g_gpsFix ? p.center : p.dim, p.bg);
+  tft.drawString("LOC",124,cy);
   tft.setTextColor(p.text,p.bg);
-  tft.drawString("HOME",256,cy);
-  tft.drawString("BACK",303,cy);
+  tft.drawString("HOME",258,cy);
+  tft.drawString("BACK",302,cy);
   // center lat/lon + zoom
   tft.setTextFont(1); tft.setTextColor(p.dim,p.bg);
   char c[30]; snprintf(c,sizeof(c),"%.2f,%.2f z%d",g_mapLat,g_mapLon,g_mapZoom);
-  tft.drawString(c,178,cy);
+  tft.drawString(c,192,cy);
+}
+
+// ---- draw the GPS "you are here" marker on the map, if a fix is available ----
+static void drawMapGps(){
+  if(!(g_app.gpsOn && g_gpsFix)) return;
+  const Palette& p=PAL(); int z=g_mapZoom;
+  double cxpx=lonToPx(g_mapLon,z), cypx=latToPx(g_mapLat,z);
+  int sx=(int)lround(lonToPx(g_gpsLon,z)-cxpx+160);
+  int sy=(int)lround(latToPx(g_gpsLat,z)-cypx+120);
+  if(sx<-8||sx>328||sy<-8||sy>240-MAP_BAR_H) return;
+  tft.drawCircle(sx,sy,6,p.center); tft.drawCircle(sx,sy,3,p.center);
+  tft.drawLine(sx-9,sy,sx+9,sy,p.center); tft.drawLine(sx,sy-9,sx,sy+9,p.center);
+  tft.setTextFont(1); tft.setTextDatum(TL_DATUM); tft.setTextColor(p.center,p.bg);
+  tft.drawString("YOU",sx+8,sy+4);
 }
 
 // ---- on-screen numeric keypad: type LAT then LON to jump the map anywhere ----
@@ -135,6 +153,7 @@ static void drawMapFlights(){
   if(!g_app.layerOn[L_FLIGHTS]) return;
   const Palette& p=PAL(); int z=g_mapZoom;
   double cxpx=lonToPx(g_mapLon,z), cypx=latToPx(g_mapLat,z);
+  DATA_LOCK();
   for(int i=0;i<g_acN;i++){ if(!g_ac[i].used) continue;
     int sx=(int)lround(lonToPx(g_ac[i].lon,z)-cxpx+160);
     int sy=(int)lround(latToPx(g_ac[i].lat,z)-cypx+120);
@@ -142,6 +161,7 @@ static void drawMapFlights(){
     triGlyph(sx,sy,g_ac[i].track, g_ac[i].mil?p.mil:p.text, 4);
     tft.drawCircle(sx,sy,5, g_ac[i].mil?p.mil:p.accent);  // ring for contrast on imagery
   }
+  DATA_UNLOCK();
 }
 
 // ---- full repaint: fetch every visible tile, then overlay -------------------
@@ -180,6 +200,7 @@ inline void drawMap(){
   if(buf) free(buf);
   g_app.lastRx=millis();
   drawMapFlights();
+  drawMapGps();
   // center crosshair
   tft.drawFastHLine(154,120,12,p.accent); tft.drawFastVLine(160,114,12,p.accent);
   drawMapBar();

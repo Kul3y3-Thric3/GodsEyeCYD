@@ -32,6 +32,7 @@ inline void prefsLoad(){
                  (LAYER_SATS_ON<<L_SATS)|(LAYER_LAUNCHES_ON<<L_LAUNCHES)|
                  (LAYER_CCTV_ON<<L_CCTV);
   byteToLayers(g_prefs.getUChar("layers", defL));
+  g_app.gpsOn = g_prefs.getBool("gps", GPS_DEFAULT_ON);
   g_prefs.end();
 }
 
@@ -52,6 +53,7 @@ inline void prefsSaveUI(){
   g_prefs.putInt("theme", g_app.theme);
   g_prefs.putInt("range", g_app.rangeNm);
   g_prefs.putUChar("layers", layersToByte());
+  g_prefs.putBool("gps", g_app.gpsOn);
   g_prefs.end();
 }
 

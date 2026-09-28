@@ -41,6 +41,7 @@ inline void pollFlights(){
   JsonArray arr = doc["aircraft"].isNull() ? doc["ac"].as<JsonArray>()
                                            : doc["aircraft"].as<JsonArray>();
 
+  DATA_LOCK();
   int n=0;
   for(JsonObject a : arr){
     if(n>=FLIGHTS_MAX) break;
@@ -65,6 +66,7 @@ inline void pollFlights(){
     n++;
   }
   g_acN = n;
+  DATA_UNLOCK();
   snprintf(g_flDiag,sizeof(g_flDiag),"ok%d",n);
   g_app.lastRx = millis();
 }
@@ -83,6 +85,7 @@ inline void pollQuakes(){
   JsonDocument doc;
   if(!fetchJson(url,doc,&filter,9000)){ setStatus("USGS: net err"); return; }
 
+  DATA_LOCK();
   int n=0;
   for(JsonObject ft : doc["features"].as<JsonArray>()){
     if(n>= (int)(sizeof(g_qk)/sizeof(g_qk[0]))) break;
@@ -96,6 +99,7 @@ inline void pollQuakes(){
     q.used=true; n++;
   }
   g_qkN=n;
+  DATA_UNLOCK();
   g_app.lastRx=millis();
 }
 
@@ -137,6 +141,7 @@ inline void pollSats(){
   time_t now=time(nullptr);
   if(now < 1700000000){ g_app.timeUp=false; return; }   // clock not set yet
   g_app.timeUp=true;
+  DATA_LOCK();
   for(size_t i=0;i<SATS_MAX;i++){
     if(!s_sgp4Ready[i]){ g_sat[i].used=false; continue; }
     s_sgp4[i].findsat((unsigned long)now);
@@ -145,6 +150,7 @@ inline void pollSats(){
     g_sat[i].altKm= s_sgp4[i].satAlt;
     g_sat[i].used = true;
   }
+  DATA_UNLOCK();
 }
 
 // ----------------------------------------------------------------- LAUNCHES ---
@@ -174,6 +180,7 @@ inline void pollLaunches(){
   JsonDocument doc;
   if(!fetchJson(url,doc,&filter,9000)) return;
 
+  DATA_LOCK();
   int n=0;
   for(JsonObject r : doc["results"].as<JsonArray>()){
     if(n>=(int)(sizeof(g_lx)/sizeof(g_lx[0]))) break;
@@ -184,4 +191,5 @@ inline void pollLaunches(){
     L.used=true; n++;
   }
   g_lxN=n;
+  DATA_UNLOCK();
 }

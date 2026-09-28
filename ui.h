@@ -72,6 +72,7 @@ static void resolveFlightSel(){
 static void drawScope(){
   const Palette& p=PAL();
   s_blipN=0;
+  DATA_LOCK();                 // hold the data mutex while reading contact arrays
   resolveFlightSel();
   // scope backdrop
   tft.fillRect(0,TOP_H,PANEL_X,240-TOP_H-BOT_H,p.bg);
@@ -136,6 +137,15 @@ static void drawScope(){
       addBlip(sx,sy,L_FLIGHTS,i);
     }
   }
+  DATA_UNLOCK();
+  // ---- GPS "you are here" (module on + fix) ----
+  if(g_app.gpsOn && g_gpsFix && projectPPI(g_gpsLat,g_gpsLon,sx,sy)){
+    tft.drawLine(sx-5,sy,sx+5,sy,p.center);
+    tft.drawLine(sx,sy-5,sx,sy+5,p.center);
+    tft.drawCircle(sx,sy,4,p.center);
+    tft.setTextFont(1); tft.setTextDatum(TL_DATUM); tft.setTextColor(p.center,p.bg);
+    tft.drawString("GPS",sx+6,sy-3);
+  }
 }
 
 // --------------------------------------------------------------------- panel --
@@ -160,6 +170,7 @@ static void drawPanel(){
   int y=TOP_H+24;
   bool haveSel = (g_app.selIndex>=0);
 
+  DATA_LOCK();               // reading contact arrays for the telemetry card
   if(haveSel && g_app.selLayer==L_FLIGHTS && g_app.selIndex<g_acN){
     Aircraft& a=g_ac[g_app.selIndex];
     tft.setTextDatum(TL_DATUM); tft.setTextFont(2);
@@ -207,6 +218,12 @@ static void drawPanel(){
     snprintf(b,sizeof(b),"%d",g_qkN); panelLine(y,"QUAKES", g_app.layerOn[L_QUAKES]?b:"off",p.dim,p.quake);
     int sc=0; for(size_t i=0;i<SATS_MAX;i++) if(g_sat[i].used)sc++;
     snprintf(b,sizeof(b),"%d",sc);    panelLine(y,"SATS",   g_app.layerOn[L_SATS]?b:"off",p.dim,p.sat);
+    if(g_app.gpsOn){
+      char g[18];
+      if(g_gpsFix) snprintf(g,sizeof(g),"%dsat FIX",g_gpsSats);
+      else         snprintf(g,sizeof(g),"%s",g_gpsPresent?"acquiring":"no module");
+      panelLine(y,"GPS",g,p.dim, g_gpsFix?p.center:p.warn);
+    }
     if(g_app.layerOn[L_LAUNCHES] && g_lxN>0){
       tft.setTextColor(p.launch,p.bg); tft.setTextFont(1);
       tft.drawString("NEXT LAUNCH",PANEL_X+2,y); y+=10;
@@ -220,22 +237,26 @@ static void drawPanel(){
       }
     }
   }
+  DATA_UNLOCK();
 }
 
 // ------------------------------------------------------------------ botbar ----
-#define LEGEND_X_MAX 72          // tap x < this on the bottom bar = a layer toggle
+#define LEGEND_X_MAX 86          // tap x < this on the bottom bar = F Q S L C G toggle
 static void drawBotBar(){
   const Palette& p=PAL();
   int y=240-BOT_H;
   tft.fillRect(0,y,320,BOT_H,p.bg);
   tft.drawFastHLine(0,y,320,p.grid);
-  // layer legend — tappable toggles (F Q S L C). Zone: x < LEGEND_X_MAX.
+  // layer legend — tappable toggles (F Q S L C) + GPS (G). Zone: x < LEGEND_X_MAX.
   const char* L="FQSLC";
   tft.setTextFont(1); tft.setTextDatum(TL_DATUM);
   for(int i=0;i<5;i++){ char c[2]={L[i],0};
     tft.setTextColor(g_app.layerOn[i]?p.center:p.dim,p.bg);   // enum order == legend order
     tft.drawString(c,6+i*13,y+4);
   }
+  // GPS chip: green with a fix, amber when on but acquiring / no module, dim off
+  tft.setTextColor(!g_app.gpsOn ? p.dim : (g_gpsFix ? p.center : p.warn), p.bg);
+  tft.drawString("G",6+5*13,y+4);
   // theme name (center)
   tft.setTextDatum(TC_DATUM); tft.setTextColor(p.accent,p.bg);
   tft.drawString(p.name,160,y+4);
