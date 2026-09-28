@@ -17,7 +17,9 @@ enum Screen { SCR_RADAR = 0, SCR_MENU, SCR_CCTV, SCR_MAP };
 // ---- Contact data models -----------------------------------------------------
 struct Aircraft {
   char     hex[8];
-  char     flight[10];
+  char     flight[10];   // callsign
+  char     reg[10];      // registration / tail number (e.g. N12345)
+  char     type[6];      // ICAO type code (e.g. B738)
   float    lat, lon;
   int32_t  altFt;        // baro altitude, feet (-99999 = unknown/ground)
   int16_t  gs;           // ground speed, knots
@@ -67,6 +69,7 @@ struct AppState {
   bool    layerOn[L_COUNT];
   int     selLayer    = L_FLIGHTS;     // which layer the selection points into
   int     selIndex    = -1;            // index within that layer, -1 = none
+  char    selHex[8]   = "";            // selected aircraft ICAO hex (stable across refreshes)
   int     cctvIdx     = 0;              // selected camera
   int     cctvScroll  = 0;             // top row of the camera list
   bool    cctvPlaying = false;         // false = list view, true = live stream

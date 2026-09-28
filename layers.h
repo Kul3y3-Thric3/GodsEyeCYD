@@ -30,6 +30,7 @@ inline void pollFlights(){
     f["hex"]=true; f["flight"]=true; f["lat"]=true; f["lon"]=true;
     f["alt_baro"]=true; f["gs"]=true; f["track"]=true;
     f["baro_rate"]=true; f["dbFlags"]=true;
+    f["r"]=true; f["t"]=true;                 // registration + ICAO type
   }
 
   JsonDocument doc; int code=0;
@@ -57,6 +58,8 @@ inline void pollFlights(){
     ac.track = (int)(a["track"] | 0.0f);
     ac.vs    = (int)(a["baro_rate"] | 0);
     ac.mil   = ((a["dbFlags"] | 0) & 1) != 0;
+    strlcpy(ac.reg,  a["r"] | "", sizeof(ac.reg));
+    strlcpy(ac.type, a["t"] | "", sizeof(ac.type));
     ac.seen  = millis();
     ac.used  = true;
     n++;

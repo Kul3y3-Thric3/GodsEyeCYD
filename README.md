@@ -51,7 +51,7 @@ The original **God's Eye View** is a photorealistic 3D globe (CesiumJS + WebGL +
 | | Feature | Details |
 |---|---|---|
 | 🎯 | **Tactical PPI radar** | North-up plan-position display centered on your location, 3 range rings, tap the chip to cycle 20 → 250 NM. Tap any blip for a live telemetry card. |
-| ✈️ | **Live flights** | Real-time ADS-B. Heading-aligned aircraft glyphs, military traffic highlighted, tap for callsign / altitude / ground speed / track / range. |
+| ✈️ | **Live flights** | Real-time ADS-B. Heading-aligned aircraft glyphs, military traffic highlighted. Tap one for a full ID card — callsign, **registration (tail #)**, **aircraft type**, ICAO hex, altitude, ground speed, track, and range. Selection stays locked to that aircraft across refreshes. |
 | 🌍 | **Earthquakes** | USGS global feed, sized by magnitude, tap for depth + location. |
 | 🛰️ | **Satellites** | On-device **SGP4** propagation from live CelesTrak TLEs (ISS, Hubble, NOAA-19 by default). Plots the sub-satellite point as it passes over your scope. |
 | 🚀 | **Rocket launches** | Upcoming launches with a live T-minus countdown in the panel. |
@@ -204,14 +204,14 @@ ui.h             radar, HUD, telemetry, menu, touch mapping
 **Design notes**
 - Feeds poll on a **rotating schedule** — one TLS request in flight at a time keeps peak heap safe without PSRAM.
 - Satellites propagate locally via **SGP4**; TLEs refresh every 6 h.
-- Selection tracks by array index today (a selected plane can "jump" on refresh) — hex-matching is a planned improvement.
+- A selected aircraft is locked by its ICAO **hex**, so it stays selected on the same plane as the list refreshes (not by list position).
 
 ---
 
 ## Roadmap
 
 - [x] Tappable **F Q S L C** layer toggles on the radar bar
-- [ ] Match tracked aircraft by ICAO hex across refreshes (stable selection)
+- [x] Match tracked aircraft by ICAO hex across refreshes (stable selection)
 - [ ] Move polling to a FreeRTOS task (core 0) so fetches never touch the UI
 - [x] On-screen keypad to jump to any latitude/longitude in MAP mode
 - [ ] On-screen keyboard for city-name search (geocoded) in MAP mode

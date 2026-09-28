@@ -95,7 +95,7 @@ static void handleTouch(){
       if(mx<LEGEND_X_MAX){                            // F Q S L C -> toggle layer
         int li=clampi((mx-2)/13,0,L_COUNT-1);
         g_app.layerOn[li]=!g_app.layerOn[li];
-        g_app.selIndex=-1; prefsSaveUI(); drawRadar();
+        g_app.selIndex=-1; g_app.selHex[0]=0; prefsSaveUI(); drawRadar();
       }
       else if(mx>=170 && mx<212)  enterMap();
       else if(mx>=212 && mx<262)  enterMenu();
@@ -103,7 +103,7 @@ static void handleTouch(){
     } else if(mx>=PANEL_X && my<TOP_H+20){            // range chip
       int n=sizeof(RANGE_STEPS)/sizeof(RANGE_STEPS[0]); int cur=0;
       for(int i=0;i<n;i++) if(RANGE_STEPS[i]==g_app.rangeNm) cur=i;
-      g_app.rangeNm=RANGE_STEPS[(cur+1)%n]; g_app.selIndex=-1; prefsSaveUI(); drawRadar();
+      g_app.rangeNm=RANGE_STEPS[(cur+1)%n]; g_app.selIndex=-1; g_app.selHex[0]=0; prefsSaveUI(); drawRadar();
     } else if(mx<PANEL_X && my>TOP_H && my<240-BOT_H){ // scope -> select
       selectAt(mx,my); drawRadar();
     }

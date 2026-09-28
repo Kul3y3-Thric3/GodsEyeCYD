@@ -58,10 +58,21 @@ static void drawTopBar(){
   tft.fillCircle(312,7,3, live?p.center:p.warn);
 }
 
+// Re-point the flight selection at the aircraft with the stored hex, so a
+// selected plane stays locked to THAT aircraft even as the list reorders on
+// each refresh. Clears the selection if the plane has left the query area.
+static void resolveFlightSel(){
+  if(g_app.selLayer!=L_FLIGHTS || g_app.selHex[0]==0) return;
+  for(int i=0;i<g_acN;i++)
+    if(g_ac[i].used && strcmp(g_ac[i].hex,g_app.selHex)==0){ g_app.selIndex=i; return; }
+  g_app.selIndex=-1;             // tracked plane is gone
+}
+
 // --------------------------------------------------------------------- scope --
 static void drawScope(){
   const Palette& p=PAL();
   s_blipN=0;
+  resolveFlightSel();
   // scope backdrop
   tft.fillRect(0,TOP_H,PANEL_X,240-TOP_H-BOT_H,p.bg);
 
@@ -153,15 +164,19 @@ static void drawPanel(){
     Aircraft& a=g_ac[g_app.selIndex];
     tft.setTextDatum(TL_DATUM); tft.setTextFont(2);
     tft.setTextColor(p.accent,p.bg);
-    tft.drawString(a.flight[0]?a.flight:a.hex,PANEL_X+2,y); y+=18;
+    tft.drawString(a.flight[0]?a.flight:a.hex,PANEL_X+2,y); y+=17;
     char b[24];
     tft.setTextFont(1);
+    // identity: registration (tail) + ICAO type + hex
+    snprintf(b,sizeof(b),"%s",a.reg[0]?a.reg:"--");  panelLine(y,"REG",b,p.dim,p.text);
+    snprintf(b,sizeof(b),"%s",a.type[0]?a.type:"--");panelLine(y,"TYPE",b,p.dim,p.text);
     snprintf(b,sizeof(b),"ALT %ld",(long)a.altFt); panelLine(y,"",a.altFt<0?"ALT GND":b,p.dim,p.text);
     snprintf(b,sizeof(b),"%d kt",a.gs);      panelLine(y,"GS",b,p.dim,p.text);
     snprintf(b,sizeof(b),"%03d\xF7",a.track);panelLine(y,"TRK",b,p.dim,p.text);
     float rr=haversineNm(g_app.homeLat,g_app.homeLon,a.lat,a.lon);
     snprintf(b,sizeof(b),"%.0f nm",rr);      panelLine(y,"RNG",b,p.dim,p.text);
-    if(a.mil){ tft.setTextColor(p.mil,p.bg); tft.drawString("* MILITARY",PANEL_X+2,y); }
+    tft.setTextColor(a.mil?p.mil:p.dim,p.bg);
+    tft.drawString(a.mil?"* MILITARY":a.hex,PANEL_X+2,y);
   }
   else if(haveSel && g_app.selLayer==L_QUAKES && g_app.selIndex<g_qkN){
     Quake& q=g_qk[g_app.selIndex];
@@ -288,6 +303,11 @@ static void selectAt(int mx,int my){
     long dx=mx-s_blip[i].x, dy=my-s_blip[i].y, d=dx*dx+dy*dy;
     if(d<bd){ bd=d; best=i; }
   }
-  if(best<0){ g_app.selIndex=-1; }
-  else { g_app.selLayer=s_blip[best].layer; g_app.selIndex=s_blip[best].idx; }
+  if(best<0){ g_app.selIndex=-1; g_app.selHex[0]=0; }
+  else {
+    g_app.selLayer=s_blip[best].layer; g_app.selIndex=s_blip[best].idx;
+    if(s_blip[best].layer==L_FLIGHTS && s_blip[best].idx<g_acN)
+      strlcpy(g_app.selHex,g_ac[s_blip[best].idx].hex,sizeof(g_app.selHex));
+    else g_app.selHex[0]=0;      // non-flight selection: no hex lock
+  }
 }
