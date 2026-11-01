@@ -7,7 +7,7 @@
 // =============================================================================
 #pragma once
 #include <WiFi.h>
-#include "sd.h"
+#include "sdcard.h"
 #include "gps.h"
 #include "theme.h"
 

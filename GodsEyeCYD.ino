@@ -15,7 +15,9 @@
 #include "app_state.h"
 #include "layers.h"
 #include "gps.h"            // optional GPS on the JST connector (before ui.h)
-#include "sd.h"             // microSD on software SPI + WiGLE CSV writer
+#include "sdcard.h"         // microSD on software SPI + WiGLE CSV writer
+                           // (named sdcard.h, NOT sd.h, so it can't shadow the
+                           //  Arduino <SD.h> that TJpg_Decoder pulls in)
 #include "ui.h"
 #include "mapview.h"        // satellite MAP mode (must follow ui.h: uses triGlyph)
 #include "cctv.h"           // CCTV list + MJPEG viewer (must follow ui.h: uses mapTouch)
