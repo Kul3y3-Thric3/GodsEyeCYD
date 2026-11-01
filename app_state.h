@@ -22,7 +22,7 @@ extern SemaphoreHandle_t g_dataMux;
 enum Layer { L_FLIGHTS = 0, L_QUAKES, L_SATS, L_LAUNCHES, L_CCTV, L_COUNT };
 
 // ---- App screens -------------------------------------------------------------
-enum Screen { SCR_RADAR = 0, SCR_MENU, SCR_CCTV, SCR_MAP };
+enum Screen { SCR_RADAR = 0, SCR_MENU, SCR_CCTV, SCR_MAP, SCR_WARDRIVE };
 
 // ---- Contact data models -----------------------------------------------------
 struct Aircraft {

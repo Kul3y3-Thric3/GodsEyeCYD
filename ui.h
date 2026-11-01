@@ -257,14 +257,15 @@ static void drawBotBar(){
   // GPS chip: green with a fix, amber when on but acquiring / no module, dim off
   tft.setTextColor(!g_app.gpsOn ? p.dim : (g_gpsFix ? p.center : p.warn), p.bg);
   tft.drawString("G",6+5*13,y+4);
-  // theme name (center)
+  // optic name (left-of-buttons, small)
   tft.setTextDatum(TC_DATUM); tft.setTextColor(p.accent,p.bg);
-  tft.drawString(p.name,160,y+4);
-  // buttons (right-aligned): MAP | MENU | CCTV
+  tft.drawString(p.name,130,y+4);
+  // tabs (right-aligned): MAP | MENU | CCTV | WD
   tft.setTextDatum(TR_DATUM); tft.setTextColor(p.text,p.bg);
-  tft.drawString("MAP", 205,y+4);
-  tft.drawString("MENU",258,y+4);
-  tft.drawString("CCTV",318,y+4);
+  tft.drawString("MAP", 204,y+4);
+  tft.drawString("MENU",241,y+4);
+  tft.drawString("CCTV",282,y+4);
+  tft.drawString("WD",  318,y+4);
 }
 
 static void drawRadar(){ drawTopBar(); drawScope(); drawPanel(); drawBotBar(); }

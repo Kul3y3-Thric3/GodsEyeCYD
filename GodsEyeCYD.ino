@@ -15,9 +15,11 @@
 #include "app_state.h"
 #include "layers.h"
 #include "gps.h"            // optional GPS on the JST connector (before ui.h)
+#include "sd.h"             // microSD on software SPI + WiGLE CSV writer
 #include "ui.h"
 #include "mapview.h"        // satellite MAP mode (must follow ui.h: uses triGlyph)
 #include "cctv.h"           // CCTV list + MJPEG viewer (must follow ui.h: uses mapTouch)
+#include "wardrive.h"       // WARDRIVE tab (must follow ui.h / gps.h / sd.h)
 #include "provision.h"      // WiFiManager portal + geocode (also pulls prefs.h)
 
 // ---- Real definitions of the extern globals ---------------------------------
@@ -103,6 +105,12 @@ static void enterMap(){
   netWaitIdle(); pollFlights();                         // one-shot: task is idle off-radar
   setStatus("MAP"); drawMap();
 }
+static void enterWardrive(){
+  g_app.screen=SCR_WARDRIVE;
+  g_netPause=true; netWaitIdle();                       // feeds off: free the radio for scanning
+  if(!g_app.gpsOn) gpsSetEnabled(true);                 // wardriving needs GPS
+  setStatus("WARDRIVE"); drawWardrive();
+}
 
 // ---- Touch dispatch ---------------------------------------------------------
 static void handleTouch(){
@@ -119,9 +127,10 @@ static void handleTouch(){
           g_app.selIndex=-1; g_app.selHex[0]=0; prefsSaveUI(); drawRadar();
         }
       }
-      else if(mx>=170 && mx<212)  enterMap();
-      else if(mx>=212 && mx<262)  enterMenu();
-      else if(mx>=262)            enterCctv();
+      else if(mx>=168 && mx<206)  enterMap();
+      else if(mx>=206 && mx<244)  enterMenu();
+      else if(mx>=244 && mx<285)  enterCctv();
+      else if(mx>=285)            enterWardrive();
     } else if(mx>=PANEL_X && my<TOP_H+20){            // range chip
       int n=sizeof(RANGE_STEPS)/sizeof(RANGE_STEPS[0]); int cur=0;
       for(int i=0;i<n;i++) if(RANGE_STEPS[i]==g_app.rangeNm) cur=i;
@@ -176,6 +185,9 @@ static void handleTouch(){
     } else {                                           // tap map body -> recenter
       mapTapRecenter(mx,my); pollFlights(); drawMap();
     }
+  }
+  else if(g_app.screen==SCR_WARDRIVE){
+    if(wardriveTouch(mx,my)){ g_netPause=false; enterRadar(); }
   }
   // debounce / wait for release
   uint32_t t0=millis();
@@ -234,6 +246,9 @@ void setup(){
   // boot has none, so this leaves the config.h defaults in place.
   prefsLoad();
   if(g_app.gpsOn) gpsSetEnabled(true);   // resume GPS if it was on last time
+#if USE_SD
+  sdInit();                              // mount the microSD (software SPI); ok if absent
+#endif
 
   // Hold BOOT at power-on to force the setup portal even if a network is saved.
   bool forcePortal = (digitalRead(BOOT_BTN)==LOW);
@@ -279,6 +294,8 @@ void loop(){
   if(g_app.layerOn[L_SATS] && millis()-tS>=POLL_SATS_MS){ tS=millis(); pollSats(); }
   doNetwork();
 #endif
+
+  if(g_app.screen==SCR_WARDRIVE) wardriveTick();   // scan + log on its schedule
 
   // render
   if(g_app.screen==SCR_RADAR && millis()-tDraw>=220){ tDraw=millis(); drawRadar(); }

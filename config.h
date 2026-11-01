@@ -77,6 +77,21 @@ static const long SAT_CATNRS[] = { 25544, 20580, 33591 };  // ISS, HST, NOAA-19
 #define GPS_BAUD       9600      // ATGM336H default
 #define GPS_DEFAULT_ON false     // start with GPS off; user toggles it on-screen
 
+// --- Wardriving + microSD (software SPI) -------------------------------------
+// The CYD's microSD shares no free hardware SPI bus (display + touch take both),
+// so the card runs on SOFTWARE SPI via the SdFat library — this leaves the
+// working display and touch completely untouched. Standard CYD SD pins:
+#define USE_SD         1         // 0 = disable SD + wardriving entirely
+#define USE_BLE        0         // Flash 2 turns this on (needs NimBLE lib)
+#define SD_CS_PIN      5
+#define SD_SCK_PIN     18
+#define SD_MISO_PIN    19
+#define SD_MOSI_PIN    23
+#define WD_SCAN_MS     4000UL    // seconds between wardrive scans
+#define WD_MAX_UNIQUE  2000      // per-session dedup cap (×6 bytes RAM)
+// NOTE: install the "SdFat" library, then set SPI_DRIVER_SELECT to 2 in its
+// SdFatConfig.h (enables software SPI). Wardriving logs to a WiGLE-format CSV.
+
 // --- NTP (needed for SGP4 satellite propagation) -----------------------------
 #define NTP_SERVER   "pool.ntp.org"
 #define GMT_OFFSET_SEC   0        // keep UTC; SGP4 wants UTC

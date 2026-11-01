@@ -58,7 +58,8 @@ The original **God's Eye View** is a photorealistic 3D globe (CesiumJS + WebGL +
 | 🗺️ | **Satellite MAP mode** | Pan/zoom **satellite imagery of anywhere on Earth** (Esri World Imagery) with **live aircraft overlaid**. Tap to recenter, ± to zoom, HOME to return. |
 | 📹 | **CCTV** | Scrollable list of **public MJPEG webcams** worldwide (ski, ports, airports, cities) streamed **live** on-device. |
 | 🎨 | **Sensor optics** | NORMAL / NVG (night vision) / FLIR ironbow / AMBER tactical palettes. |
-| 🛰️ | **GPS (optional)** | Plug an ATGM336H (or any NMEA GPS) into the 4-pin JST — auto-detected. Toggle with **G** on the legend; shows a live "you are here" on the radar and a **LOC** button to center the satellite map on your real position. Great for wardriving. |
+| 🛰️ | **GPS (optional)** | Plug an ATGM336H (or any NMEA GPS) into the 4-pin JST — auto-detected. Toggle with **G** on the legend; shows a live "you are here" on the radar and a **LOC** button to center the satellite map on your real position. |
+| 📡 | **Wardriving (WD tab)** | Logs WiFi networks + GPS to a **WiGLE-format CSV** on the microSD card — uploads straight to wigle.net. Pick **WIFI / BLE / BOTH**, hit START. De-dupes by MAC, live counts on screen. *(BLE scanning lands in the next update; WiFi is live now.)* |
 | 📱 | **Phone setup** | First-boot captive portal for WiFi + location — no file editing, no keys. Everything saved to flash (NVS). |
 
 ---
@@ -87,8 +88,9 @@ Every layer is **keyless**. Nothing here requires an account, token, or payment.
 - A 2.4 GHz WiFi network (the ESP32 has no 5 GHz radio).
 - A good USB **data** cable / stable 5V supply (WiFi streaming is current-hungry — weak power causes glitches).
 - **Optional GPS** — an ATGM336H (or any NMEA module) on the 4-pin JST. Wardriving-standard CYD wiring (ESP32 Marauder): **GPS TX → GPIO22**, **GPS RX → GPIO27**, **3.3V**, **GND**, at **9600 baud**. Pins are set in `config.h`. Uses the **TinyGPSPlus** library.
+- **microSD card** (for wardriving) — the onboard slot. Because the CYD's two hardware SPI buses are already used by the display and touch, the card runs on **software SPI** via **SdFat**, which leaves the display/touch untouched. **One-time setup:** install the `SdFat` library, open its `src/SdFatConfig.h`, and set `#define SPI_DRIVER_SELECT 2` (enables software SPI). Format the card **FAT32**.
 
-No SD card and no PSRAM required.
+No PSRAM required. SD card only needed for wardriving.
 
 ---
 
@@ -105,6 +107,7 @@ No SD card and no PSRAM required.
 | WiFiManager | tzapu |
 | Sgp4 | Hopperpop *(the `SparkFun_SGP4_Arduino_Library` is the same code and also works)* |
 | TinyGPSPlus | Mikal Hart *(only needed if you use the optional GPS)* |
+| SdFat | Bill Greiman *(for wardriving/SD — see the SD note below)* |
 
 Boards: install **esp32 by Espressif Systems** (Boards Manager). Select **ESP32 Dev Module**, and set **Tools → Partition Scheme → Huge APP**.
 
@@ -147,7 +150,7 @@ Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at
 - **Range chip** (top-right) → cycle range.
 - **Tap F Q S L C** (bottom-left) → toggle a layer on/off directly (Flights, Quakes, Sats, Launches, CCTV). Lit = on.
 - **Tap G** (after the legend) → toggle **GPS**. Dim = off, amber = on/acquiring, green = fix. With a fix, a "GPS" marker shows your position on the radar and the panel shows `Nsat FIX`.
-- Bottom bar: **MAP** · **MENU** · **CCTV**.
+- Bottom-bar tabs: **MAP** · **MENU** · **CCTV** · **WD** (wardrive).
 - Link dot (top-right) / green LED → a feed refreshed in the last 20 s.
 
 **Menu** — toggle layers, cycle **OPTIC** (palette), **SETUP** (re-open portal), current HOME shown at the bottom.
@@ -155,6 +158,21 @@ Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at
 **MAP** — tap to recenter, **− / +** zoom, **GO** to type any latitude/longitude and jump there, **LOC** to center on your live GPS position (a "YOU" marker), **HOME** to your saved location, **BACK** to radar. (You can also reach anywhere on Earth by zooming out, tapping a region, and zooming back in.)
 
 **CCTV** — scroll the list (**UP/DOWN**), tap a camera to stream; while playing, tap image or **NEXT** to skip, **PREV** back, **BACK** to the list.
+
+**WD (wardrive)** — pick **WIFI / BLE / BOTH**, tap **START**. It scans every few seconds, de-dupes by MAC, and appends each new network + your GPS fix to a WiGLE CSV on the SD card. **BACK** stops and closes the file.
+
+---
+
+## Wardriving
+
+Turn the CYD into a GPS wardriving logger. Needs the **GPS module** (above) and a **FAT32 microSD card**.
+
+1. Open the **WD** tab and choose a mode (WiFi now; BLE/BOTH next update).
+2. **START** — GPS auto-enables; the tab shows SD status, GPS fix, scan count, networks seen, and unique logged.
+3. Drive. Each new AP (by MAC) is logged **once** with its strongest sighting's coordinates. Rows are only written once you have a **GPS fix** (the screen tells you when it's waiting).
+4. **BACK** closes the file. Pull the card and upload `WD_<timestamp>.csv` straight to [wigle.net](https://wigle.net) — it's standard **WigleWifi-1.4** format (`MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,Type`).
+
+During wardriving the live data feeds pause (the radio is busy scanning), which is expected.
 
 ---
 
@@ -201,6 +219,8 @@ geo.h            haversine range/bearing + north-up PPI projection
 theme.h          the four optic palettes
 layers.h         flights / quakes / satellites (SGP4) / launches pollers
 gps.h            optional GPS (ATGM336H etc.) on the JST connector, NMEA via TinyGPSPlus
+sd.h             microSD on software SPI (SdFat) + WiGLE CSV writer
+wardrive.h       WARDRIVE tab: WiFi/BLE scan, dedup, GPS-tagged WiGLE logging
 cctv.h           CCTV: scrollable list + live MJPEG-over-HTTP viewer
 cctv_list.h      bundled offline-fallback webcam list
 cameras.txt      runtime webcam list fetched over HTTP (edit + push, no reflash)
@@ -224,6 +244,8 @@ ui.h             radar, HUD, telemetry, menu, touch mapping
 - [x] Poll feeds on a FreeRTOS task (core 0) so a slow fetch never freezes the UI
 - [x] On-screen keypad to jump to any latitude/longitude in MAP mode
 - [x] Fetch the CCTV camera list at runtime (`cameras.txt`) instead of only bundling it
+- [x] Wardriving tab — WiFi + GPS → WiGLE CSV on microSD
+- [ ] Wardriving: BLE scanning + WiFi/BLE/both modes (next flash — needs NimBLE)
 - [ ] On-screen keyboard for city-name search (geocoded) in MAP mode
 - [ ] Live-radar dead-reckoning between polls (smoother glyph motion)
 - [ ] ~~Tile caching for smoother MAP panning~~ — not feasible without PSRAM (a single decoded 256² tile is 128 KB); would need an ESP32 with PSRAM
