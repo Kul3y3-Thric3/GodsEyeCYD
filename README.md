@@ -59,7 +59,7 @@ The original **God's Eye View** is a photorealistic 3D globe (CesiumJS + WebGL +
 | 📹 | **CCTV** | Scrollable list of **public MJPEG webcams** worldwide (ski, ports, airports, cities) streamed **live** on-device. |
 | 🎨 | **Sensor optics** | NORMAL / NVG (night vision) / FLIR ironbow / AMBER tactical palettes. |
 | 🛰️ | **GPS (optional)** | Plug an ATGM336H (or any NMEA GPS) into the 4-pin JST — auto-detected. Toggle with **G** on the legend; shows a live "you are here" on the radar and a **LOC** button to center the satellite map on your real position. |
-| 📡 | **Wardriving (WD tab)** | Logs WiFi networks + GPS to a **WiGLE-format CSV** on the microSD card — uploads straight to wigle.net. Pick **WIFI / BLE / BOTH**, hit START. De-dupes by MAC, live counts on screen. *(BLE scanning lands in the next update; WiFi is live now.)* |
+| 📡 | **Wardriving (WD tab)** | Logs **WiFi + Bluetooth LE** with GPS to a **WiGLE-format CSV** on the microSD card — uploads straight to wigle.net. Pick **WIFI / BLE / BOTH**, hit START. De-dupes by MAC, live counts on screen. |
 | 📱 | **Phone setup** | First-boot captive portal for WiFi + location — no file editing, no keys. Everything saved to flash (NVS). |
 
 ---
@@ -87,10 +87,10 @@ Every layer is **keyless**. Nothing here requires an account, token, or payment.
   - The **2-USB** variant (micro-USB + USB-C) typically ships with an **ST7789** panel (the default here); the classic 1-USB variant uses **ILI9341**. Both are supported — one line in `User_Setup.h`.
 - A 2.4 GHz WiFi network (the ESP32 has no 5 GHz radio).
 - A good USB **data** cable / stable 5V supply (WiFi streaming is current-hungry — weak power causes glitches).
-- **Optional GPS** — an ATGM336H (or any NMEA module) on the 4-pin JST. Wardriving-standard CYD wiring (ESP32 Marauder): **GPS TX → GPIO22**, **GPS RX → GPIO27**, **3.3V**, **GND**, at **9600 baud**. Pins are set in `config.h`. Uses the **TinyGPSPlus** library.
+- **Optional GPS** — an ATGM336H (or any NMEA module) on the 4-pin JST. This is the **CN1** connector — the JST on the edge *opposite* the USB ports, **not** the power header beside them. Wardriving-standard CYD wiring (ESP32 Marauder): **GPS TX → GPIO22**, **GPS RX → GPIO27**, **3.3V**, **GND**, at **9600 baud** (note the TX/RX crossover). Pins are set in `config.h`. Uses the **TinyGPSPlus** library.
 - **microSD card** (for wardriving) — the onboard slot. Because the CYD's two hardware SPI buses are already used by the display and touch, the card runs on **software SPI** via **SdFat**, which leaves the display/touch untouched. **One-time setup:** install the `SdFat` library, open its `src/SdFatConfig.h`, and set `#define SPI_DRIVER_SELECT 2` (enables software SPI). Format the card **FAT32**.
 
-No PSRAM required. SD card only needed for wardriving.
+No PSRAM required. SD card only needed for wardriving; **BLE** wardriving additionally needs the **NimBLE-Arduino** library (v2.x).
 
 ---
 
@@ -108,6 +108,7 @@ No PSRAM required. SD card only needed for wardriving.
 | Sgp4 | Hopperpop *(the `SparkFun_SGP4_Arduino_Library` is the same code and also works)* |
 | TinyGPSPlus | Mikal Hart *(only needed if you use the optional GPS)* |
 | SdFat | Bill Greiman *(for wardriving/SD — see the SD note below)* |
+| NimBLE-Arduino **(v2.x)** | h2zero *(only needed for BLE wardriving)* |
 
 Boards: install **esp32 by Espressif Systems** (Boards Manager). Select **ESP32 Dev Module**, and set **Tools → Partition Scheme → Huge APP**.
 
@@ -167,12 +168,12 @@ Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at
 
 Turn the CYD into a GPS wardriving logger. Needs the **GPS module** (above) and a **FAT32 microSD card**.
 
-1. Open the **WD** tab and choose a mode (WiFi now; BLE/BOTH next update).
-2. **START** — GPS auto-enables; the tab shows SD status, GPS fix, scan count, networks seen, and unique logged.
-3. Drive. Each new AP (by MAC) is logged **once** with its strongest sighting's coordinates. Rows are only written once you have a **GPS fix** (the screen tells you when it's waiting).
-4. **BACK** closes the file. Pull the card and upload `WD_<timestamp>.csv` straight to [wigle.net](https://wigle.net) — it's standard **WigleWifi-1.4** format (`MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,Type`).
+1. Open the **WD** tab and choose a mode — **WIFI**, **BLE**, or **BOTH** (BOTH time-slices the radio: a WiFi scan then a BLE scan each cycle).
+2. **START** — GPS auto-enables; the tab shows SD status, GPS fix, scan count, WiFi/BLE seen, and unique logged.
+3. Drive. Each new AP or BLE device (by MAC) is logged **once** with its sighting coordinates. Rows are only written once you have a **GPS fix** (the screen tells you when it's waiting).
+4. **BACK** closes the file. Pull the card and upload `WD_<timestamp>.csv` straight to [wigle.net](https://wigle.net) — it's standard **WigleWifi-1.4** format (`MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,Type`). WiFi rows are tagged `Type=WIFI`, BLE devices `Type=BLE`.
 
-During wardriving the live data feeds pause (the radio is busy scanning), which is expected.
+During wardriving the live data feeds pause (the radio is busy scanning), which is expected. The BLE stack is only powered up during a BLE/BOTH run and released on STOP, so WiFi-only runs keep full memory.
 
 ---
 
@@ -219,8 +220,9 @@ geo.h            haversine range/bearing + north-up PPI projection
 theme.h          the four optic palettes
 layers.h         flights / quakes / satellites (SGP4) / launches pollers
 gps.h            optional GPS (ATGM336H etc.) on the JST connector, NMEA via TinyGPSPlus
-sd.h             microSD on software SPI (SdFat) + WiGLE CSV writer
-wardrive.h       WARDRIVE tab: WiFi/BLE scan, dedup, GPS-tagged WiGLE logging
+sdcard.h         microSD on software SPI (SdFat) + WiGLE CSV writer
+sd.h             tiny <SD.h> shim (forwards to Arduino SD; avoids a filename clash)
+wardrive.h       WARDRIVE tab: WiFi + BLE (NimBLE) scan, dedup, GPS-tagged WiGLE logging
 cctv.h           CCTV: scrollable list + live MJPEG-over-HTTP viewer
 cctv_list.h      bundled offline-fallback webcam list
 cameras.txt      runtime webcam list fetched over HTTP (edit + push, no reflash)
@@ -245,7 +247,7 @@ ui.h             radar, HUD, telemetry, menu, touch mapping
 - [x] On-screen keypad to jump to any latitude/longitude in MAP mode
 - [x] Fetch the CCTV camera list at runtime (`cameras.txt`) instead of only bundling it
 - [x] Wardriving tab — WiFi + GPS → WiGLE CSV on microSD
-- [ ] Wardriving: BLE scanning + WiFi/BLE/both modes (next flash — needs NimBLE)
+- [x] Wardriving: BLE scanning + WiFi / BLE / BOTH modes (NimBLE)
 - [ ] On-screen keyboard for city-name search (geocoded) in MAP mode
 - [ ] Live-radar dead-reckoning between polls (smoother glyph motion)
 - [ ] ~~Tile caching for smoother MAP panning~~ — not feasible without PSRAM (a single decoded 256² tile is 128 KB); would need an ESP32 with PSRAM
@@ -258,7 +260,7 @@ Contributions welcome — open an issue or PR.
 
 - **God's Eye View** by **[Bilawal Sidhu](https://github.com/bilawalsidhu)** & **Sameh Khamis** ([Halfpixel](https://halfpixel.ai)) — the original open-source live-OSINT globe that inspired this project. This firmware is an independent, hardware-scaled reimagining of that idea for the ESP32; the concept and the "spatial intelligence for everyone" spirit are theirs. → <https://github.com/bilawalsidhu/gods-eye-view> (MIT)
 - **CCTV viewer & camera list** adapted from **[7h30th3r0n3](https://github.com/7h30th3r0n3)**'s **RaspyJack** — the MJPEG-over-HTTP frame-grabbing approach and the public-webcam list. → <https://github.com/7h30th3r0n3/Raspyjack>
-- **Libraries:** TFT_eSPI & TJpg_Decoder (*Bodmer*), XPT2046_Touchscreen (*PaulStoffregen*), ArduinoJson (*Benoît Blanchon*), WiFiManager (*tzapu*), Sgp4 (*Hopperpop*).
+- **Libraries:** TFT_eSPI & TJpg_Decoder (*Bodmer*), XPT2046_Touchscreen (*PaulStoffregen*), ArduinoJson (*Benoît Blanchon*), WiFiManager (*tzapu*), Sgp4 (*Hopperpop*), SdFat (*Bill Greiman*), NimBLE-Arduino (*h2zero*).
 - **Data & imagery:** adsb.fi · adsb.lol · USGS · CelesTrak · The Space Devs · Open-Meteo · Esri World Imagery.
 
 Built by **[Kul3y3-Thric3](https://github.com/Kul3y3-Thric3)**.
