@@ -64,3 +64,62 @@ inline String prefsGetLoc(){
   g_prefs.end();
   return s;
 }
+
+// ---- Favorite map locations (saved from the MAP "FIND" screen) --------------
+// Up to FAV_MAX named places, stored in contiguous slots 0..count-1 as
+// fLa<i>/fLo<i> (double) + fNm<i> (string), with the count in "favN".
+#define FAV_MAX 10
+
+inline int prefsFavCount(){
+  g_prefs.begin(PREFS_NS, true);
+  int n = g_prefs.getInt("favN", 0);
+  g_prefs.end();
+  if(n<0) n=0; if(n>FAV_MAX) n=FAV_MAX;
+  return n;
+}
+inline bool prefsFavGet(int i,char* name,size_t cap,double& lat,double& lon){
+  if(i<0 || i>=FAV_MAX) return false;
+  char kLa[10],kLo[10],kNm[10];
+  snprintf(kLa,sizeof kLa,"fLa%d",i); snprintf(kLo,sizeof kLo,"fLo%d",i); snprintf(kNm,sizeof kNm,"fNm%d",i);
+  g_prefs.begin(PREFS_NS, true);
+  lat = g_prefs.getDouble(kLa, 1000.0);
+  lon = g_prefs.getDouble(kLo, 1000.0);
+  String s = g_prefs.getString(kNm, "");
+  g_prefs.end();
+  if(lat>900 || lon>900) return false;
+  strlcpy(name, s.c_str(), cap);
+  return true;
+}
+inline bool prefsFavAdd(const char* name,double lat,double lon){
+  int n = prefsFavCount();
+  if(n>=FAV_MAX) return false;
+  char kLa[10],kLo[10],kNm[10];
+  snprintf(kLa,sizeof kLa,"fLa%d",n); snprintf(kLo,sizeof kLo,"fLo%d",n); snprintf(kNm,sizeof kNm,"fNm%d",n);
+  g_prefs.begin(PREFS_NS, false);
+  g_prefs.putDouble(kLa, lat);
+  g_prefs.putDouble(kLo, lon);
+  g_prefs.putString(kNm, (name && name[0]) ? name : "(unnamed)");
+  g_prefs.putInt("favN", n+1);
+  g_prefs.end();
+  return true;
+}
+inline void prefsFavDelete(int idx){
+  int n = prefsFavCount();
+  if(idx<0 || idx>=n) return;
+  for(int i=idx; i<n-1; i++){                     // shift slots down
+    char nm[16]; double la,lo;
+    if(prefsFavGet(i+1,nm,sizeof nm,la,lo)){
+      char kLa[10],kLo[10],kNm[10];
+      snprintf(kLa,sizeof kLa,"fLa%d",i); snprintf(kLo,sizeof kLo,"fLo%d",i); snprintf(kNm,sizeof kNm,"fNm%d",i);
+      g_prefs.begin(PREFS_NS, false);
+      g_prefs.putDouble(kLa,la); g_prefs.putDouble(kLo,lo); g_prefs.putString(kNm,nm);
+      g_prefs.end();
+    }
+  }
+  char kLa[10],kLo[10],kNm[10];                    // clear the now-unused last slot
+  snprintf(kLa,sizeof kLa,"fLa%d",n-1); snprintf(kLo,sizeof kLo,"fLo%d",n-1); snprintf(kNm,sizeof kNm,"fNm%d",n-1);
+  g_prefs.begin(PREFS_NS, false);
+  g_prefs.remove(kLa); g_prefs.remove(kLo); g_prefs.remove(kNm);
+  g_prefs.putInt("favN", n-1);
+  g_prefs.end();
+}

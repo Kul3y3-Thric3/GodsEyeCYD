@@ -23,6 +23,7 @@
 #include "cctv.h"           // CCTV list + MJPEG viewer (must follow ui.h: uses mapTouch)
 #include "wardrive.h"       // WARDRIVE tab (must follow ui.h / gps.h / sd.h)
 #include "provision.h"      // WiFiManager portal + geocode (also pulls prefs.h)
+#include "findloc.h"        // MAP "FIND" picker: search / lat-lon / GPS / home / favorites
 
 // ---- Real definitions of the extern globals ---------------------------------
 Aircraft  g_ac[FLIGHTS_MAX];   volatile int g_acN=0;
@@ -170,7 +171,7 @@ static void handleTouch(){
     if(my>=240-MAP_BAR_H){                             // map bar
       if(mx<32)        { if(g_mapZoom>MAP_MIN_Z){g_mapZoom--; drawMap();} }        // [-]
       else if(mx<66)   { if(g_mapZoom<MAP_MAX_Z){g_mapZoom++; drawMap();} }        // [+]
-      else if(mx<104)  { if(mapGoto()) pollFlights(); drawMap(); }                 // [GO] keypad
+      else if(mx<104)  { if(findLocMenu()) pollFlights(); drawMap(); }             // [FIND] search/fav/lat-lon
       else if(mx<150)  {                                                           // [LOC] center on GPS
         if(g_app.gpsOn && g_gpsFix){
           g_mapLat=g_gpsLat; g_mapLon=g_gpsLon;

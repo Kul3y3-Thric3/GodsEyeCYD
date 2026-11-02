@@ -47,7 +47,7 @@ static bool mapTftOutput(int16_t x,int16_t y,uint16_t w,uint16_t h,uint16_t* bmp
 
 // ---- the map bar (bottom): [-] [+] [GO] [LOC]  center/zoom  [HOME] [BACK] ----
 //  Touch zones (handled in the .ino): <32 zoom out · 32-66 zoom in ·
-//  66-104 GO (keypad) · 104-150 LOC (center on GPS) · 236-284 HOME · 284+ BACK ·
+//  66-104 FIND (search/favorites/lat-lon) · 104-150 LOC (GPS) · 236-284 HOME · 284+ BACK ·
 //  elsewhere on the map = recenter on the tapped point.
 static void drawMapBar(){
   const Palette& p=PAL();
@@ -58,7 +58,7 @@ static void drawMapBar(){
   tft.setTextColor(p.accent,p.bg);
   tft.drawString("-", 16,cy);
   tft.drawString("+", 48,cy);
-  tft.drawString("GO",84,cy);
+  tft.drawString("FIND",84,cy);
   // LOC lit only when GPS has a fix
   tft.setTextColor(g_app.gpsOn && g_gpsFix ? p.center : p.dim, p.bg);
   tft.drawString("LOC",124,cy);

@@ -55,7 +55,7 @@ The original **God's Eye View** is a photorealistic 3D globe (CesiumJS + WebGL +
 | 🌍 | **Earthquakes** | USGS global feed, sized by magnitude, tap for depth + location. |
 | 🛰️ | **Satellites** | On-device **SGP4** propagation from live CelesTrak TLEs (ISS, Hubble, NOAA-19 by default). Plots the sub-satellite point as it passes over your scope. |
 | 🚀 | **Rocket launches** | Upcoming launches with a live T-minus countdown in the panel. |
-| 🗺️ | **Satellite MAP mode** | Pan/zoom **satellite imagery of anywhere on Earth** (Esri World Imagery) with **live aircraft overlaid**. Tap to recenter, ± to zoom, HOME to return. |
+| 🗺️ | **Satellite MAP mode** | Pan/zoom **satellite imagery of anywhere on Earth** (Esri World Imagery) with **live aircraft overlaid**. A **FIND** picker searches any place/address, jumps to lat/lon, GPS, or Home, and recalls saved **favorites**. |
 | 📹 | **CCTV** | Scrollable list of **public MJPEG webcams** worldwide (ski, ports, airports, cities) streamed **live** on-device. |
 | 🎨 | **Sensor optics** | NORMAL / NVG (night vision) / FLIR ironbow / AMBER tactical palettes. |
 | 🛰️ | **GPS (optional)** | Plug an ATGM336H (or any NMEA GPS) into the 4-pin JST — auto-detected. Toggle with **G** on the legend; shows a live "you are here" on the radar and a **LOC** button to center the satellite map on your real position. |
@@ -156,7 +156,7 @@ Every boot after auto-reconnects silently. **To re-configure:** hold **BOOT** at
 
 **Menu** — toggle layers, cycle **OPTIC** (palette), **SETUP** (re-open portal), current HOME shown at the bottom.
 
-**MAP** — tap to recenter, **− / +** zoom, **GO** to type any latitude/longitude and jump there, **LOC** to center on your live GPS position (a "YOU" marker), **HOME** to your saved location, **BACK** to radar. (You can also reach anywhere on Earth by zooming out, tapping a region, and zooming back in.)
+**MAP** — tap to recenter, **− / +** zoom, **FIND** opens a location picker (search a place/address, enter lat/lon, jump to GPS or Home, or pick a saved **favorite** / save the current spot), **LOC** centers on your live GPS position (a "YOU" marker), **HOME** your saved location, **BACK** to radar. (You can also reach anywhere by zooming out, tapping a region, and zooming back in.)
 
 **CCTV** — scroll the list (**UP/DOWN**), tap a camera to stream; while playing, tap image or **NEXT** to skip, **PREV** back, **BACK** to the list.
 
@@ -227,6 +227,7 @@ cctv.h           CCTV: scrollable list + live MJPEG-over-HTTP viewer
 cctv_list.h      bundled offline-fallback webcam list
 cameras.txt      runtime webcam list fetched over HTTP (edit + push, no reflash)
 mapview.h        satellite MAP mode (Esri tiles + flight overlay, pan/zoom)
+findloc.h        MAP "FIND" picker: place search (geocode), lat/lon, GPS, home, favorites
 ui.h             radar, HUD, telemetry, menu, touch mapping
 ```
 
@@ -248,7 +249,7 @@ ui.h             radar, HUD, telemetry, menu, touch mapping
 - [x] Fetch the CCTV camera list at runtime (`cameras.txt`) instead of only bundling it
 - [x] Wardriving tab — WiFi + GPS → WiGLE CSV on microSD
 - [x] Wardriving: BLE scanning + WiFi / BLE / BOTH modes (NimBLE)
-- [ ] On-screen keyboard for city-name search (geocoded) in MAP mode
+- [x] On-screen keyboard to search a place/address (geocoded) + saved **favorites** in MAP mode
 - [ ] Live-radar dead-reckoning between polls (smoother glyph motion)
 - [ ] ~~Tile caching for smoother MAP panning~~ — not feasible without PSRAM (a single decoded 256² tile is 128 KB); would need an ESP32 with PSRAM
 
