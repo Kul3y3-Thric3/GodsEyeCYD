@@ -1,25 +1,36 @@
 // =============================================================================
-//  God's Eye CYD  -  WARDRIVE tab  (WiFi now; BLE added in the next flash)
-//  Scans WiFi (and later BLE), dedupes by MAC, and logs each new network with
-//  the current GPS fix to a WiGLE-format CSV on the SD card.
+//  God's Eye CYD  -  WARDRIVE tab  (WiFi + BLE)
+//  Scans WiFi and/or BLE, dedupes by MAC, and logs each new network/device with
+//  the current GPS fix to a WiGLE-format CSV on the SD card. Modes: WIFI / BLE /
+//  BOTH (BOTH time-slices the radio: a WiFi scan then a BLE scan each tick).
 //
-//  Include AFTER ui.h (uses mapTouch) and after gps.h / sd.h.
+//  BLE needs the "NimBLE-Arduino" library (h2zero), v2.x. The BLE stack is only
+//  spun up when a BLE/BOTH run starts, and torn down on STOP, so WiFi-only runs
+//  (and the rest of the app) keep their heap.
+//
+//  Include AFTER ui.h (uses mapTouch) and after gps.h / sdcard.h.
 // =============================================================================
 #pragma once
 #include <WiFi.h>
 #include "sdcard.h"
 #include "gps.h"
 #include "theme.h"
+#if USE_BLE
+#include <NimBLEDevice.h>
+#endif
 
 static int      g_wdMode    = 0;     // 0 = WiFi, 1 = BLE, 2 = Both
 static bool     g_wdRunning = false;
 static int      g_wdWifiLast= 0;     // APs seen in the last scan
-static int      g_wdBleLast = 0;
-static long     g_wdUnique  = 0;     // unique networks logged this session
+static int      g_wdBleLast = 0;     // BLE devices seen in the last scan
+static long     g_wdUnique  = 0;     // unique networks/devices logged this session
 static long     g_wdScanN   = 0;
 static uint32_t g_wdLast    = 0;
 static uint8_t  g_wdSeen[WD_MAX_UNIQUE][6];
 static int      g_wdSeenN   = 0;
+#if USE_BLE
+static bool     g_bleInit   = false; // NimBLE stack is up
+#endif
 
 static const char* authStr(uint8_t e){
   switch(e){
@@ -64,6 +75,57 @@ static void wdScanWifi(){
   WiFi.scanDelete();
 }
 
+#if USE_BLE
+// Parse "aa:bb:cc:dd:ee:ff" into 6 bytes (version-proof vs NimBLE address internals)
+static bool wdParseMac(const char* s, uint8_t* out){
+  unsigned v[6];
+  if(sscanf(s,"%x:%x:%x:%x:%x:%x",&v[0],&v[1],&v[2],&v[3],&v[4],&v[5])!=6) return false;
+  for(int i=0;i<6;i++) out[i]=(uint8_t)v[i];
+  return true;
+}
+
+static void wdBleBegin(){
+  if(g_bleInit) return;
+  NimBLEDevice::init("");                    // no name; we're a scanner only
+  NimBLEScan* s = NimBLEDevice::getScan();
+  s->setActiveScan(true);                    // ask for scan responses (names)
+  s->setInterval(100);
+  s->setWindow(99);
+  g_bleInit = true;
+}
+static void wdBleEnd(){
+  if(!g_bleInit) return;
+  NimBLEDevice::deinit(true);                // free the BT controller + heap
+  g_bleInit = false;
+}
+
+// blocking BLE scan (BLE_SCAN_MS); logs new device MACs only with a GPS fix
+static void wdScanBle(){
+  wdBleBegin();
+  NimBLEScan* s = NimBLEDevice::getScan();
+  NimBLEScanResults res = s->getResults(BLE_SCAN_MS, false);   // v2: ms, blocking
+  int n = (int)res.getCount();
+  g_wdBleLast = n;
+  for(int i=0;i<n;i++){
+    const NimBLEAdvertisedDevice* d = res.getDevice(i);
+    if(!d) continue;
+    std::string as = d->getAddress().toString();
+    uint8_t b[6];
+    if(!wdParseMac(as.c_str(), b)) continue;
+    if(g_gpsFix && wdSeenAdd(b)){
+      char mac[18];
+      snprintf(mac,sizeof(mac),"%02X:%02X:%02X:%02X:%02X:%02X",b[0],b[1],b[2],b[3],b[4],b[5]);
+      std::string nm = d->getName();
+      wigleRow(mac, nm.c_str(), "[BLE]", 0, d->getRSSI(),
+               g_gpsLat, g_gpsLon, gpsAltM(), 10.0, "BLE");
+      g_wdUnique++;
+    }
+  }
+  if(g_gpsFix) wigleFlush();
+  s->clearResults();
+}
+#endif
+
 inline void drawWardrive();   // fwd
 
 static void wdStart(){
@@ -76,6 +138,9 @@ static void wdStop(){
   if(!g_wdRunning) return;
   g_wdRunning=false;
   wigleClose();
+#if USE_BLE
+  wdBleEnd();                                  // return BT heap to the app
+#endif
 }
 
 // Called from loop() while the wardrive screen is up.
@@ -138,8 +203,16 @@ inline void drawWardrive(){
 
   tft.setTextColor(p.dim,p.bg); tft.drawString("Scans:",10,y);
   tft.setTextColor(p.text,p.bg); snprintf(b,sizeof(b),"%ld",g_wdScanN); tft.drawString(b,72,y); y+=20;
-  tft.setTextColor(p.dim,p.bg); tft.drawString("WiFi seen:",10,y);
-  tft.setTextColor(p.text,p.bg); snprintf(b,sizeof(b),"%d",g_wdWifiLast); tft.drawString(b,112,y); y+=20;
+
+  // WiFi / BLE last-scan counts on one line
+  tft.setTextColor(p.dim,p.bg);  tft.drawString("WiFi:",10,y);
+  tft.setTextColor(p.text,p.bg); snprintf(b,sizeof(b),"%d",g_wdWifiLast); tft.drawString(b,56,y);
+#if USE_BLE
+  tft.setTextColor(p.dim,p.bg);  tft.drawString("BLE:",150,y);
+  tft.setTextColor(p.text,p.bg); snprintf(b,sizeof(b),"%d",g_wdBleLast); tft.drawString(b,192,y);
+#endif
+  y+=20;
+
   tft.setTextColor(p.dim,p.bg); tft.drawString("Logged:",10,y);
   tft.setTextColor(p.accent,p.bg); snprintf(b,sizeof(b),"%ld unique",g_wdUnique); tft.drawString(b,78,y); y+=20;
 
