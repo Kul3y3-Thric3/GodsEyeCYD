@@ -24,6 +24,9 @@
 #include "wardrive.h"       // WARDRIVE tab (must follow ui.h / gps.h / sd.h)
 #include "provision.h"      // WiFiManager portal + geocode (also pulls prefs.h)
 #include "findloc.h"        // MAP "FIND" picker: search / lat-lon / GPS / home / favorites
+#if USE_BLE
+#include "esp_bt.h"         // to release classic-BT RAM back to the heap (we use BLE only)
+#endif
 
 // ---- Real definitions of the extern globals ---------------------------------
 Aircraft  g_ac[FLIGHTS_MAX];   volatile int g_acN=0;
@@ -232,6 +235,13 @@ static void netTask(void*){
 
 void setup(){
   Serial.begin(115200);
+#if USE_BLE
+  // We use BLE only, never classic Bluetooth. Hand the classic-BT controller
+  // memory back to the heap so the RAM-hungry features (satellite MAP tiles and
+  // CCTV MJPEG) keep the headroom they had before BLE was compiled in. BLE stays
+  // available — NimBLE claims its own (BLE-mode) controller memory on demand.
+  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+#endif
   pinMode(LED_R,OUTPUT); pinMode(LED_G,OUTPUT); pinMode(LED_B,OUTPUT); ledOff();
   pinMode(TFT_BL,OUTPUT); digitalWrite(TFT_BL,HIGH);
 
